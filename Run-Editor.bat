@@ -1,9 +1,9 @@
 @echo off
-title NotebookLM 폰트 수정기 실행
+title NotebookLM 슬라이드 닥터 실행
 setlocal
 
 echo ==========================================
-echo    NotebookLM 폰트 수정기 실행 중...
+echo    NotebookLM 슬라이드 닥터 실행 중...
 echo ==========================================
 echo.
 

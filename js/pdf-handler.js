@@ -212,6 +212,118 @@ const PDFHandler = {
     },
 
     /**
+     * 선택 영역 내 텍스트의 폰트 정보 추출
+     * @param {number} pageNum - 페이지 번호
+     * @param {Object} pdfRect - PDF 좌표계 기준 영역 {x, y, width, height}
+     * @param {number} scale - 현재 스케일
+     * @returns {Promise<Object>} - { fontName, fontSize, isBold, isItalic, fontFamily, fontWeight }
+     */
+    async getTextInfoInRect(pageNum, pdfRect, scale) {
+        if (!this._pdfDoc) {
+            return { fontName: null, fontSize: null, isBold: false, isItalic: false };
+        }
+
+        try {
+            const page = await this._pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: scale });
+            const textContent = await page.getTextContent();
+
+            const matchingItems = [];
+
+            for (const item of textContent.items) {
+                if (!item.str || !item.str.trim()) continue;
+
+                // transform: [scaleX, skewX, skewY, scaleY, translateX, translateY]
+                // 폰트 크기는 보통 transform[0] 또는 transform[3]
+                const fontSize = Math.abs(item.transform[0]) || Math.abs(item.transform[3]);
+                const pdfX = item.transform[4];
+                const pdfY = item.transform[5];
+
+                // PDF 좌표계 → 캔버스 좌표계 변환
+                const canvasX = pdfX * scale;
+                const canvasY = viewport.height - (pdfY * scale);
+
+                // 선택 영역과 겹치는지 확인 (좌표계 변환 후)
+                const rectLeft = pdfRect.x;
+                const rectRight = pdfRect.x + pdfRect.width;
+                const rectTop = pdfRect.y;
+                const rectBottom = pdfRect.y + pdfRect.height;
+
+                if (canvasX >= rectLeft && canvasX <= rectRight &&
+                    canvasY >= rectTop && canvasY <= rectBottom) {
+                    matchingItems.push({
+                        text: item.str,
+                        fontName: item.fontName || '',
+                        fontSize: fontSize
+                    });
+                }
+            }
+
+            if (matchingItems.length === 0) {
+                return { fontName: null, fontSize: null, isBold: false, isItalic: false };
+            }
+
+            // 가장 빈도 높은 폰트명과 평균 폰트 크기 계산
+            const fontCounts = {};
+            let totalFontSize = 0;
+
+            for (const item of matchingItems) {
+                fontCounts[item.fontName] = (fontCounts[item.fontName] || 0) + 1;
+                totalFontSize += item.fontSize;
+            }
+
+            const dominantFont = Object.entries(fontCounts)
+                .sort((a, b) => b[1] - a[1])[0][0];
+            const avgFontSize = Math.round(totalFontSize / matchingItems.length);
+
+            // 폰트 스타일 추론
+            const lowerFont = dominantFont.toLowerCase();
+            const isBold = /bold|heavy|black|semibold|demibold|extrabold|ultrabold/.test(lowerFont);
+            const isItalic = /italic|oblique/.test(lowerFont);
+
+            // 폰트 패밀리 추론
+            let fontFamily = 'Pretendard'; // 기본값
+            let fontWeight = '400';
+
+            if (lowerFont.includes('nanum')) {
+                fontFamily = 'Nanum Gothic';
+            } else if (lowerFont.includes('malgun') || lowerFont.includes('맑은')) {
+                fontFamily = 'Malgun Gothic';
+            } else if (lowerFont.includes('noto') && lowerFont.includes('kr')) {
+                fontFamily = 'Noto Sans KR';
+            } else if (lowerFont.includes('pretendard')) {
+                fontFamily = 'Pretendard';
+            }
+
+            // 굵기 추론
+            if (isBold) {
+                if (/semibold|demibold/.test(lowerFont)) {
+                    fontWeight = '600';
+                } else {
+                    fontWeight = '700';
+                }
+            } else if (/medium/.test(lowerFont)) {
+                fontWeight = '500';
+            }
+
+            console.log('폰트 정보 추출:', { dominantFont, avgFontSize, isBold, isItalic, fontFamily, fontWeight });
+
+            return {
+                fontName: dominantFont,
+                fontSize: avgFontSize,
+                isBold,
+                isItalic,
+                fontFamily,
+                fontWeight
+            };
+
+        } catch (error) {
+            console.error('텍스트 정보 추출 오류:', error);
+            return { fontName: null, fontSize: null, isBold: false, isItalic: false };
+        }
+    },
+
+    /**
      * 텍스트 오버레이 추가 (pdf-lib 사용) - 캔버스 이미지 방식
      * @param {number} pageNum
      * @param {Object} overlay - { x, y, width, height, text, font, size, color, backgroundColor }

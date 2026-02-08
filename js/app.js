@@ -1,6 +1,6 @@
 /**
  * Main Application
- * NotebookLM 슬라이드 폰트 수정기
+ * NotebookLM 슬라이드 닥터
  */
 
 (function () {
@@ -97,7 +97,7 @@
 
     function init() {
         bindEvents();
-        console.log('NotebookLM 폰트 수정기 초기화 완료');
+        console.log('NotebookLM 슬라이드 닥터 초기화 완료');
     }
 
     function bindEvents() {
@@ -412,12 +412,7 @@
         // 추출된 색상을 입력 필드에 적용
         elements.fontColor.value = textColor;
 
-        // 선택 영역 높이에 맞춰 폰트 크기 자동 설정 (약 80%)
-        const pdfHeight = state.selectionRect.height / scale;
-        const autoFontSize = Math.max(10, Math.round(pdfHeight * 0.8));
-        elements.fontSize.value = autoFontSize;
-
-        // OCR 수행
+        // OCR 수행 (이후 글자 수를 고려하여 폰트 크기가 지능적으로 설정됨)
         await performOCR();
     }
 
@@ -524,6 +519,35 @@
           <small style="color: var(--text-muted)">신뢰도: ${confidence}% (${level})</small>
         `;
                 elements.textInput.value = result.text;
+
+                // 폰트 크기 지능형 추천 (글자 수 고려)
+                const text = result.text;
+                const charCount = text.length;
+                const scale = PDFHandler.getScale();
+                const rect = state.selectionRect;
+                const pdfWidth = rect.width / scale;
+                const pdfHeight = rect.height / scale;
+
+                // 텍스트 너비 대비 폰트 크기 비율 (평균 0.65)
+                const charRatio = 0.65;
+
+                // 단일 행 기준 제안 크기
+                const sizeByWidth = (pdfWidth * 0.95) / (charCount * charRatio);
+                const sizeByHeight = pdfHeight * 0.8;
+
+                let suggestedSize;
+                // 글자 수가 너무 많아 단일 행으로 크기가 너무 작아지는 경우 (높이 대비 40% 미만)
+                if (sizeByWidth < sizeByHeight * 0.4 && charCount > 10) {
+                    // 2~3행 배치를 고려하여 높이 비중 조절
+                    const sizeByMultiLine = Math.min(pdfHeight * 0.4, (pdfWidth * 0.95) / (Math.ceil(charCount / 2.5) * charRatio));
+                    suggestedSize = Math.max(sizeByWidth, sizeByMultiLine);
+                } else {
+                    suggestedSize = Math.min(sizeByWidth, sizeByHeight);
+                }
+
+                // 범위 제한 (12px ~ 120px) 및 반올림
+                const finalFontSize = Math.max(12, Math.min(120, Math.round(suggestedSize)));
+                elements.fontSize.value = finalFontSize;
             } else {
                 elements.ocrResult.innerHTML = '<span class="placeholder">텍스트를 인식하지 못했습니다. 직접 입력해주세요.</span>';
                 elements.textInput.value = '';
@@ -537,30 +561,77 @@
             showToast('텍스트 인식 실패: ' + error.message, 'error');
         }
 
-        // 텍스트 기반 폰트 자동 선택 (성공/실패 여부 상관없이 텍스트 박스 값 기준... 아니면 성공 시만?)
-        // OCR 결과가 있을 때만 자동 선택
-        const currentText = elements.textInput.value;
-        if (currentText && currentText.trim()) {
-            const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(currentText);
-            // 현재 선택된 폰트가 적절하지 않을 때만 변경
-            const currentVal = elements.fontSelect.value;
+        // PDF에서 폰트 정보 추출 및 자동 적용
+        try {
+            const scale = PDFHandler.getScale();
+            const fontInfo = await PDFHandler.getTextInfoInRect(
+                state.currentPage,
+                state.selectionRect,
+                scale
+            );
 
-            if (hasKorean) {
-                // 한글이 있는데 한글 폰트가 아니면 변경 (Pretendard 기본)
-                if (!currentVal.includes('Pretendard') && !currentVal.includes('Nanum') && !currentVal.includes('Malgun') && !currentVal.includes('Noto')) {
-                    elements.fontSelect.value = "Pretendard|400";
-                } else if (!currentVal.includes('|')) {
-                    // 구 버전 값인 경우 업데이트
-                    elements.fontSelect.value = "Pretendard|400";
+            if (fontInfo && fontInfo.fontName) {
+                // 폰트 패밀리 및 굵기 설정
+                const fontValue = `${fontInfo.fontFamily}|${fontInfo.fontWeight}`;
+
+                // fontSelect에서 해당 옵션 찾기
+                const options = Array.from(elements.fontSelect.options);
+                const matchingOption = options.find(opt => opt.value === fontValue);
+
+                if (matchingOption) {
+                    elements.fontSelect.value = fontValue;
+                } else {
+                    // 정확히 일치하는 옵션이 없으면 같은 패밀리에서 가장 가까운 굵기 선택
+                    const familyOption = options.find(opt => opt.value.startsWith(fontInfo.fontFamily));
+                    if (familyOption) {
+                        elements.fontSelect.value = familyOption.value;
+                    }
                 }
-                // (단순화: 한글 있으면 무조건 Pretendard Regular로 시작)
-                elements.fontSelect.value = "Pretendard|400";
+
+                // 폰트 크기 설정 (PDF에서 추출된 값 우선, 없으면 기존 계산 유지)
+                if (fontInfo.fontSize && fontInfo.fontSize > 0) {
+                    const suggestedSize = Math.max(12, Math.min(120, Math.round(fontInfo.fontSize)));
+                    elements.fontSize.value = suggestedSize;
+                }
+
+                // Bold 버튼 상태 설정
+                if (fontInfo.isBold) {
+                    elements.btnBold.classList.add('active');
+                    state.richTextStyles.bold = true;
+                } else {
+                    elements.btnBold.classList.remove('active');
+                    state.richTextStyles.bold = false;
+                }
+
+                // Italic 버튼 상태 설정
+                if (fontInfo.isItalic) {
+                    elements.btnItalic.classList.add('active');
+                    state.richTextStyles.italic = true;
+                } else {
+                    elements.btnItalic.classList.remove('active');
+                    state.richTextStyles.italic = false;
+                }
+
+                console.log('PDF 폰트 자동 적용:', fontValue, 'Bold:', fontInfo.isBold, 'Italic:', fontInfo.isItalic);
             } else {
-                // 영문만 있으면 Noto Sans KR
-                elements.fontSelect.value = "Noto Sans KR|400";
+                // PDF에서 폰트 정보를 추출하지 못한 경우 기존 로직 사용
+                const currentText = elements.textInput.value;
+                if (currentText && currentText.trim()) {
+                    const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(currentText);
+                    elements.fontSelect.value = hasKorean ? "Pretendard|400" : "Noto Sans KR|400";
+                }
             }
 
             // 폰트 변경 반영
+            handleFontChange();
+        } catch (fontError) {
+            console.warn('폰트 정보 추출 실패, 기본값 사용:', fontError);
+            // 폴백: 기존 로직
+            const currentText = elements.textInput.value;
+            if (currentText && currentText.trim()) {
+                const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(currentText);
+                elements.fontSelect.value = hasKorean ? "Pretendard|400" : "Noto Sans KR|400";
+            }
             handleFontChange();
         }
     }
