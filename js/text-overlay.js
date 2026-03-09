@@ -3,6 +3,18 @@
  * 텍스트 오버레이 관리
  */
 
+// 색상/폰트 추정 알고리즘 매직넘버 분리
+const ALGO_CONFIG = {
+    bgCornerRatio: 0.15,
+    bgMaxCornerSize: 20,
+    bgQuantStep: 16,
+    bgFallbackThreshold: 10,
+    textDiffThreshold: 40,
+    textInnerRatio: 0.8,
+    textQuantStep: 16,
+    boldDensityThreshold: 0.18
+};
+
 const TextOverlay = {
     _overlays: [],
     _currentPageOverlays: new Map(),
@@ -59,7 +71,10 @@ const TextOverlay = {
     },
 
     /**
-     * 캔버스 영역에서 평균 배경색 추출
+     * 캔버스 영역에서 배경색 추출 (4코너 샘플링 + 최빈값 방식)
+     * [Fix-New] 4코너에는 텍스트가 없다는 원리로 정확한 배경 샘플
+     *   - 어두운/컬러 배경에서도 정확하게 동작
+     *   - 코너 샘플이 부족하면 전체 영역 히스토그램 최빈값으로 fallback
      * @param {HTMLCanvasElement} canvas
      * @param {Object} rect - { x, y, width, height }
      * @param {number} scale - PDF 스케일
@@ -68,64 +83,70 @@ const TextOverlay = {
     extractBackgroundColor(canvas, rect, scale = 1.5) {
         const ctx = canvas.getContext('2d');
 
-        // 스케일 적용된 좌표
-        const x = Math.floor(rect.x);
-        const y = Math.floor(rect.y);
-        const width = Math.floor(rect.width);
-        const height = Math.floor(rect.height);
+        // [Fix-New] Utils.cssToCanvas 활용
+        const { x, y, width, height } = Utils.cssToCanvas(canvas, rect.x, rect.y, rect.width, rect.height);
 
-        // 영역이 너무 작으면 기본 흰색 반환
         if (width < 1 || height < 1) {
             return '#FFFFFF';
         }
 
         try {
-            // 영역 가장자리에서 색상 샘플링 (테두리 픽셀들)
-            const samples = [];
+            // 코너 샘플 크기
+            const cs = Math.max(2, Math.min(ALGO_CONFIG.bgMaxCornerSize, Math.floor(Math.min(width, height) * ALGO_CONFIG.bgCornerRatio)));
+            const cornerPixels = [];
 
-            // 상단 가장자리
-            const topData = ctx.getImageData(x, y, width, 1).data;
-            for (let i = 0; i < topData.length; i += 4) {
-                samples.push([topData[i], topData[i + 1], topData[i + 2]]);
+            // 4코너 영역 픽셀 수집
+            const corners = [
+                { cx: x, cy: y },
+                { cx: x + width - cs, cy: y },
+                { cx: x, cy: y + height - cs },
+                { cx: x + width - cs, cy: y + height - cs },
+            ];
+
+            for (const { cx, cy } of corners) {
+                const cw = Math.max(1, Math.min(cs, width));
+                const ch = Math.max(1, Math.min(cs, height));
+                if (cx < 0 || cy < 0) continue;
+                const data = ctx.getImageData(cx, cy, cw, ch).data;
+                for (let i = 0; i < data.length; i += 4) {
+                    if (data[i + 3] < 128) continue;
+                    cornerPixels.push([data[i], data[i + 1], data[i + 2]]);
+                }
             }
 
-            // 하단 가장자리
-            const bottomData = ctx.getImageData(x, y + height - 1, width, 1).data;
-            for (let i = 0; i < bottomData.length; i += 4) {
-                samples.push([bottomData[i], bottomData[i + 1], bottomData[i + 2]]);
+            // 코너 샘플이 부족하면 전체 영역으로 fallback
+            const useFallback = cornerPixels.length < ALGO_CONFIG.bgFallbackThreshold;
+            const samplePixels = useFallback ? (() => {
+                const all = [];
+                const data = ctx.getImageData(x, y, width, height).data;
+                for (let i = 0; i < data.length; i += 4) {
+                    if (data[i + 3] >= 128) all.push([data[i], data[i + 1], data[i + 2]]);
+                }
+                return all;
+            })() : cornerPixels;
+
+            if (samplePixels.length === 0) return '#FFFFFF';
+
+            // 설정된 단계 양자화 히스토그램 → 최빈값 선택
+            const QUANT = ALGO_CONFIG.bgQuantStep;
+            const histogram = {};
+            for (const [r, g, b] of samplePixels) {
+                const qr = Math.round(r / QUANT) * QUANT;
+                const qg = Math.round(g / QUANT) * QUANT;
+                const qb = Math.round(b / QUANT) * QUANT;
+                const key = `${qr},${qg},${qb}`;
+                histogram[key] = (histogram[key] || 0) + 1;
             }
 
-            // 좌측 가장자리
-            const leftData = ctx.getImageData(x, y, 1, height).data;
-            for (let i = 0; i < leftData.length; i += 4) {
-                samples.push([leftData[i], leftData[i + 1], leftData[i + 2]]);
-            }
+            const [topKey] = Object.entries(histogram).sort((a, b) => b[1] - a[1])[0];
+            const [r, g, b] = topKey.split(',').map(Number);
 
-            // 우측 가장자리
-            const rightData = ctx.getImageData(x + width - 1, y, 1, height).data;
-            for (let i = 0; i < rightData.length; i += 4) {
-                samples.push([rightData[i], rightData[i + 1], rightData[i + 2]]);
-            }
-
-            if (samples.length === 0) {
-                return '#FFFFFF';
-            }
-
-            // 평균 색상 계산
-            let r = 0, g = 0, b = 0;
-            for (const [sr, sg, sb] of samples) {
-                r += sr;
-                g += sg;
-                b += sb;
-            }
-            r = Math.round(r / samples.length);
-            g = Math.round(g / samples.length);
-            b = Math.round(b / samples.length);
-
-            // Hex로 변환
-            const hex = '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join('');
-            console.log('추출된 배경색:', hex);
-            return hex.toUpperCase();
+            const hex = '#' + [r, g, b].map(c =>
+                Math.min(255, c).toString(16).padStart(2, '0')
+            ).join('').toUpperCase();
+            console.log('[배경색] 4코너 결과:', hex,
+                `(코너픽셀: ${cornerPixels.length}, fallback: ${useFallback})`);
+            return hex;
         } catch (error) {
             console.warn('배경색 추출 오류:', error);
             return '#FFFFFF';
@@ -133,7 +154,8 @@ const TextOverlay = {
     },
 
     /**
-     * 캔버스 영역에서 텍스트 색상 추출 (배경과 가장 대비되는 색상)
+     * 캔버스 영역에서 텍스트 색상 추출
+     * [Fix-New] 임계값 40(연한 색도 캐치), WCAG 강제 흑/백 제거 → 실제 색상 보존
      * @param {HTMLCanvasElement} canvas
      * @param {Object} rect - { x, y, width, height }
      * @param {string} backgroundColor - 이미 추출된 배경색
@@ -142,13 +164,9 @@ const TextOverlay = {
     extractTextColor(canvas, rect, backgroundColor) {
         const ctx = canvas.getContext('2d');
 
-        // 스케일 적용된 좌표
-        const x = Math.floor(rect.x);
-        const y = Math.floor(rect.y);
-        const width = Math.floor(rect.width);
-        const height = Math.floor(rect.height);
+        // [Fix-New] Utils.cssToCanvas 활용
+        const { x, y, width, height } = Utils.cssToCanvas(canvas, rect.x, rect.y, rect.width, rect.height);
 
-        // 영역이 너무 작으면 기본 검정색 반환
         if (width < 5 || height < 5) {
             return '#000000';
         }
@@ -159,62 +177,64 @@ const TextOverlay = {
             const bgG = parseInt(backgroundColor.substring(3, 5), 16);
             const bgB = parseInt(backgroundColor.substring(5, 7), 16);
 
-            // 영역 내부에서 픽셀 샘플링 (가운데 영역)
-            const innerX = x + Math.floor(width * 0.2);
-            const innerY = y + Math.floor(height * 0.2);
-            const innerWidth = Math.max(1, Math.floor(width * 0.6));
-            const innerHeight = Math.max(1, Math.floor(height * 0.6));
+            // 배경 가장자리 텍스트 오염 최소화 (Config 비율 참고)
+            const marginX = Math.floor((1 - ALGO_CONFIG.textInnerRatio) / 2 * width);
+            const marginY = Math.floor((1 - ALGO_CONFIG.textInnerRatio) / 2 * height);
+            const innerX = x + marginX;
+            const innerY = y + marginY;
+            const innerWidth = Math.max(1, Math.floor(width * ALGO_CONFIG.textInnerRatio));
+            const innerHeight = Math.max(1, Math.floor(height * ALGO_CONFIG.textInnerRatio));
 
             const imageData = ctx.getImageData(innerX, innerY, innerWidth, innerHeight).data;
 
-            // 배경과 다른 색상들 수집
+            // 배경과 다른 픽셀 수집
             const textColors = [];
-            const threshold = 30; // 배경과 구분하는 임계값
+            const threshold = ALGO_CONFIG.textDiffThreshold;
 
             for (let i = 0; i < imageData.length; i += 4) {
-                const r = imageData[i];
-                const g = imageData[i + 1];
-                const b = imageData[i + 2];
+                const alpha = imageData[i + 3];
+                if (alpha < 128) continue;
 
-                // 배경색과의 차이 계산
-                const diff = Math.abs(r - bgR) + Math.abs(g - bgG) + Math.abs(b - bgB);
-
-                if (diff > threshold) {
-                    textColors.push([r, g, b]);
-                }
+                const r = imageData[i], g = imageData[i + 1], b = imageData[i + 2];
+                const diff = Math.sqrt(
+                    Math.pow(r - bgR, 2) + Math.pow(g - bgG, 2) + Math.pow(b - bgB, 2)
+                );
+                if (diff > threshold) textColors.push([r, g, b]);
             }
 
             if (textColors.length === 0) {
-                // 배경과 대비되는 색상이 없으면 배경 기준으로 검/흰 결정
-                const bgBrightness = (bgR + bgG + bgB) / 3;
+                // 완전히 추출 불가능한 경우에만 배경 기반 fallback
+                const bgBrightness = 0.299 * bgR + 0.587 * bgG + 0.114 * bgB;
                 return bgBrightness > 128 ? '#000000' : '#FFFFFF';
             }
 
-            // 가장 많이 등장하는 색상 찾기 (대략적인 양자화)
+            // 설정된 단계 양자화 히스토그램 → 최빈값
             const colorCounts = {};
+            const QUANT = ALGO_CONFIG.textQuantStep;
             for (const [r, g, b] of textColors) {
-                // 색상 양자화 (8단계)
-                const qr = Math.round(r / 32) * 32;
-                const qg = Math.round(g / 32) * 32;
-                const qb = Math.round(b / 32) * 32;
-                const key = `${qr},${qg},${qb}`;
+                const key = `${Math.round(r / QUANT) * QUANT},${Math.round(g / QUANT) * QUANT},${Math.round(b / QUANT) * QUANT}`;
                 colorCounts[key] = (colorCounts[key] || 0) + 1;
             }
 
-            // 가장 많은 색상 선택
-            let maxCount = 0;
-            let dominantColor = [0, 0, 0];
-            for (const [key, count] of Object.entries(colorCounts)) {
-                if (count > maxCount) {
-                    maxCount = count;
-                    const [r, g, b] = key.split(',').map(Number);
-                    dominantColor = [r, g, b];
-                }
-            }
+            const [topColorKey] = Object.entries(colorCounts).sort((a, b) => b[1] - a[1])[0];
+            const [tr, tg, tb] = topColorKey.split(',').map(Number);
 
-            const hex = '#' + dominantColor.map(c => Math.min(255, c).toString(16).padStart(2, '0')).join('');
-            console.log('추출된 텍스트 색상:', hex);
-            return hex.toUpperCase();
+            const textHex = '#' + [tr, tg, tb].map(c =>
+                Math.min(255, c).toString(16).padStart(2, '0')
+            ).join('').toUpperCase();
+
+            // WCAG 대비비 참고 로그 (강제 변환 없음)
+            const getL = (r, g, b) => {
+                const s = [r, g, b].map(c => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+                return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+            };
+            const L1 = getL(tr, tg, tb), L2 = getL(bgR, bgG, bgB);
+            const contrast = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+            console.log('[폰트색] 추출:', textHex, '| 대비비:', contrast.toFixed(2),
+                '| 후보픽셀:', textColors.length);
+
+            // [Fix-New] WCAG 강제 변환 제거 — 실제 추출된 색상 그대로 사용
+            return textHex;
         } catch (error) {
             console.warn('텍스트 색상 추출 오류:', error);
             return '#000000';
@@ -273,6 +293,55 @@ const TextOverlay = {
     },
 
     /**
+     * Canvas 픽셀 밀도로 Bold 여부 추정 (PDF 폰트명 파싱 실패 시 보조 감지)
+     * [Fix-3] 글자 픽셀(배경과 다른 픽셀) 밀도가 높으면 Bold로 추정
+     * @param {HTMLCanvasElement} canvas
+     * @param {Object} rect - { x, y, width, height }
+     * @param {string} backgroundColor - 배경색 hex
+     * @returns {boolean}
+     */
+    estimateIsBold(canvas, rect, backgroundColor) {
+        try {
+            const ctx = canvas.getContext('2d');
+
+            // [Fix-New] Utils.cssToCanvas 활용
+            const { x: cx, y: cy, width: cw, height: ch } = Utils.cssToCanvas(canvas, rect.x, rect.y, rect.width, rect.height);
+
+            const marginX = Math.floor((1 - ALGO_CONFIG.textInnerRatio) / 2 * cw);
+            const marginY = Math.floor((1 - ALGO_CONFIG.textInnerRatio) / 2 * ch);
+            const x = cx + marginX;
+            const y = cy + marginY;
+            const w = Math.max(1, Math.floor(cw * ALGO_CONFIG.textInnerRatio));
+            const h = Math.max(1, Math.floor(ch * ALGO_CONFIG.textInnerRatio));
+
+            const bgR = parseInt(backgroundColor.substring(1, 3), 16);
+            const bgG = parseInt(backgroundColor.substring(3, 5), 16);
+            const bgB = parseInt(backgroundColor.substring(5, 7), 16);
+
+            const data = ctx.getImageData(x, y, w, h).data;
+            let totalPixels = 0, darkPixels = 0;
+
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] < 128) continue;
+                totalPixels++;
+                const diff = Math.sqrt(
+                    Math.pow(data[i] - bgR, 2) +
+                    Math.pow(data[i + 1] - bgG, 2) +
+                    Math.pow(data[i + 2] - bgB, 2)
+                );
+                if (diff > ALGO_CONFIG.textDiffThreshold) darkPixels++;
+            }
+
+            if (totalPixels === 0) return false;
+            const density = darkPixels / totalPixels;
+            console.log('[Bold 추정] 픽셀 밀도:', density.toFixed(3), `(>${ALGO_CONFIG.boldDensityThreshold} 이면 Bold)`);
+            return density > ALGO_CONFIG.boldDensityThreshold;
+        } catch (e) {
+            return false;
+        }
+    },
+
+    /**
      * 특정 오버레이의 순수 콘텐츠만 렌더링 (배경 + 텍스트)
      * @param {HTMLCanvasElement} canvas
      * @param {Object} overlay
@@ -310,7 +379,8 @@ const TextOverlay = {
             if (overlay.isBold) weight = 'bold'; // 명시적 Bold 토글 우선
 
             const fontFamily = overlay.fontFamily || overlay.font || 'Pretendard';
-            ctx.font = `${fontStyle}${weight} ${overlay.size * scale}px "${fontFamily}", "Noto Sans KR", sans-serif`;
+            const fontSize = overlay.size * scale;
+            ctx.font = `${fontStyle}${weight} ${fontSize}px "${fontFamily}", "Noto Sans KR", sans-serif`;
             ctx.textBaseline = 'top';
 
             // 정렬 설정
@@ -325,11 +395,21 @@ const TextOverlay = {
                 ctx.textAlign = 'left';
             }
 
+            // [Fix-A] 영역 밖 텍스트 클리핑 — Canvas 드로잉 자체를 영역 안으로 제한
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            ctx.clip();
+
             // 텍스트를 영역 안에 맞게 렌더링
             const lines = this._wrapText(ctx, overlay.text, w);
-            let ty = y + 4;
+            const lineHeight = fontSize * 1.2;
+            const padding = 4;
+            let ty = y + padding;
 
             for (const line of lines) {
+                // [Fix-A] 다음 줄이 영역 높이를 초과하면 중단 (반쪽 잘린 행 방지)
+                if (ty + fontSize > y + h - padding) break;
+
                 ctx.fillText(line, textX, ty);
 
                 // 밑줄 그리기
@@ -341,14 +421,14 @@ const TextOverlay = {
 
                     ctx.beginPath();
                     ctx.strokeStyle = overlay.color;
-                    ctx.lineWidth = Math.max(1, (overlay.size * scale) / 15);
-                    const lineY = ty + (overlay.size * scale) * 0.95;
+                    ctx.lineWidth = Math.max(1, fontSize / 15);
+                    const lineY = ty + fontSize * 0.95;
                     ctx.moveTo(lineX, lineY);
                     ctx.lineTo(lineX + metrics.width, lineY);
                     ctx.stroke();
                 }
 
-                ty += overlay.size * scale * 1.2;
+                ty += lineHeight;
             }
         }
 
@@ -487,33 +567,11 @@ const TextOverlay = {
 
     /**
      * 텍스트 줄바꿈 처리
+     * [Phase3] Utils.wrapText()로 위임 — 중복 코드 제거
      * @private
      */
     _wrapText(ctx, text, maxWidth) {
-        const lines = [];
-        const paragraphs = text.split('\n');
-
-        for (const paragraph of paragraphs) {
-            const words = paragraph.split('');
-            let currentLine = '';
-
-            for (const char of words) {
-                const testLine = currentLine + char;
-                const metrics = ctx.measureText(testLine);
-
-                if (metrics.width > maxWidth - 8 && currentLine) {
-                    lines.push(currentLine);
-                    currentLine = char;
-                } else {
-                    currentLine = testLine;
-                }
-            }
-            if (currentLine) {
-                lines.push(currentLine);
-            }
-        }
-
-        return lines;
+        return Utils.wrapText(ctx, text, maxWidth, 8);
     },
 
     /**

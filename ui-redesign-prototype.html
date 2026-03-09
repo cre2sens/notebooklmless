@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NotebookLM 슬라이드 닥터 — UI 개선안 프로토타입</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════
+   디자인 토큰 — v2 (개선안)
+   ─────────────────────────────────────────────────────
+   기존: 순수 검정(#0a0a0f) + 차가운 파랑 그라디언트
+   개선: 따뜻한 차콜(#0d1117) + 인디고+틸 듀얼 액센트
+════════════════════════════════════════════════════════ */
+:root {
+  /* ── 배경 계층 (3-tier elevation) ─────────── */
+  --bg-app:      #0d1117;   /* 앱 전체 바닥 (기존 #0a0a0f) */
+  --bg-surface:  #161b22;   /* 패널 표면 (기존 #12121a) */
+  --bg-elevated: #21262d;   /* 입력·버튼 배경 (기존 #1a1a25) */
+  --bg-overlay:  rgba(22,27,34,0.92); /* 글래스모피즘 */
+
+  /* ── 텍스트 ───────────────────────────────── */
+  --text-primary:   #e6edf3;  /* 기존보다 약간 따뜻한 흰색 */
+  --text-secondary: #8b949e;
+  --text-muted:     #484f58;
+  --text-disabled:  #3d444d;
+
+  /* ── 액센트 — 인디고 Primary + 틸 Secondary ─ */
+  --accent:        #6366f1;   /* 기존과 동일 */
+  --accent-light:  #818cf8;
+  --accent-dim:    rgba(99,102,241,0.15);
+  --accent-glow:   0 0 24px rgba(99,102,241,0.35);
+  --teal:          #0ea5e9;   /* 신규: 정보·보조 액션 */
+  --teal-dim:      rgba(14,165,233,0.15);
+
+  /* ── 의미론적 색상 ────────────────────────── */
+  --success:  #3fb950;
+  --warning:  #d29922;
+  --error:    #f85149;
+  --info:     #58a6ff;
+
+  /* ── 테두리 ───────────────────────────────── */
+  --border:       rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.16);
+  --border-focus: var(--accent);
+
+  /* ── 그림자 ───────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+
+  /* ── 치수 ─────────────────────────────────── */
+  --header-h:       60px;
+  --step-bar-h:     40px;         /* 신규: 워크플로우 스텝 바 */
+  --panel-left-w:   220px;        /* 기존 180px → 220px */
+  --panel-right-w:  360px;        /* 기존 300px → 360px */
+
+  /* ── 타이포 ───────────────────────────────── */
+  --font: 'Inter', 'Noto Sans KR', sans-serif;
+
+  /* ── 라디우스 ─────────────────────────────── */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+
+  /* ── 전환 ─────────────────────────────────── */
+  --t-fast: 0.13s ease;
+  --t-mid:  0.22s ease;
+}
+
+/* ───────── Reset ───────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--font); font-size: 14px;
+  color: var(--text-primary); background: var(--bg-app); overflow: hidden; }
+
+/* ═══════════════════════════════════════════════
+   DEMO 컨트롤 바 (프로토타입 전용)
+═══════════════════════════════════════════════ */
+.demo-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+  background: rgba(13,17,23,0.97); border-top: 1px solid #30363d;
+  padding: 8px 20px; display: flex; align-items: center; gap: 12px;
+  font-size: 12px; color: var(--text-secondary);
+}
+.demo-bar span { font-weight: 600; color: var(--teal); margin-right: 4px; }
+.demo-btn {
+  padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border-hover);
+  background: var(--bg-elevated); color: var(--text-primary); cursor: pointer;
+  font-size: 12px; font-family: var(--font); transition: all var(--t-fast);
+}
+.demo-btn:hover { border-color: var(--accent-light); color: var(--accent-light); }
+.demo-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+.demo-sep { height: 16px; width: 1px; background: var(--border); }
+
+/* ═══════════════════════════════════════════════
+   HEADER (개선)
+   변경: 스텝 인디케이터 아래에 배치 → 헤더 높이 유지
+         로고에 뱃지 추가 / 버튼 재설계
+═══════════════════════════════════════════════ */
+.header {
+  height: var(--header-h); display: flex; align-items: center;
+  justify-content: space-between; padding: 0 24px;
+  background: var(--bg-overlay); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border); position: relative; z-index: 100;
+}
+.header-logo {
+  display: flex; align-items: center; gap: 12px;
+}
+.logo-icon {
+  width: 32px; height: 32px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+  border-radius: var(--r-sm); display: flex; align-items: center;
+  justify-content: center;
+}
+.logo-icon svg { width: 18px; height: 18px; color: white; }
+.logo-text h1 {
+  font-size: 17px; font-weight: 700;
+  background: linear-gradient(135deg, #818cf8 0%, #c084fc 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  line-height: 1.2;
+}
+.logo-text .logo-sub {
+  font-size: 10px; color: var(--text-muted); letter-spacing: 0.5px; line-height: 1;
+}
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ── 키보드 단축키 힌트 버튼 (신규) ── */
+.btn-kbd {
+  width: 32px; height: 32px; border-radius: var(--r-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-secondary); cursor: pointer; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--t-fast); font-family: var(--font);
+}
+.btn-kbd:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--r-md); font-size: 13px; font-weight: 500;
+  cursor: pointer; border: none; transition: all var(--t-fast); font-family: var(--font);
+  white-space: nowrap;
+}
+.btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.btn-ghost {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.btn-ghost:hover { border-color: var(--border-hover); color: var(--text-primary); background: var(--bg-elevated); }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  color: white; box-shadow: var(--accent-glow);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+
+/* ═══════════════════════════════════════════════
+   STEP BAR (신규) — 워크플로우 4단계 표시
+═══════════════════════════════════════════════ */
+.step-bar {
+  height: var(--step-bar-h); display: flex; align-items: center;
+  padding: 0 24px; gap: 0;
+  background: var(--bg-surface); border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.step-item {
+  display: flex; align-items: center; gap: 8px; padding: 0 16px 0 0;
+  font-size: 12px; font-weight: 500; color: var(--text-muted);
+  white-space: nowrap; cursor: default;
+}
+.step-item:first-child { padding-left: 0; }
+.step-num {
+  width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.step-arrow { color: var(--text-muted); font-size: 11px; margin-right: 8px; }
+/* 완료 상태 */
+.step-item.done .step-num {
+  background: var(--success); border-color: var(--success); color: white;
+}
+.step-item.done { color: var(--text-secondary); }
+/* 활성 상태 */
+.step-item.active .step-num {
+  background: var(--accent); border-color: var(--accent); color: white;
+  box-shadow: 0 0 10px rgba(99,102,241,0.5);
+}
+.step-item.active { color: var(--text-primary); }
+
+/* ═══════════════════════════════════════════════
+   MAIN LAYOUT
+═══════════════════════════════════════════════ */
+.main-content {
+  display: flex;
+  height: calc(100vh - var(--header-h) - var(--step-bar-h) - 32px); /* demo bar */
+}
+
+/* ───── 패널 공통 ───── */
+.panel {
+  background: var(--bg-surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-left  { width: var(--panel-left-w); flex-shrink: 0; }
+.panel-center {
+  flex: 1; background: var(--bg-app); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; position: relative;
+}
+.panel-right { width: var(--panel-right-w); flex-shrink: 0; border-right: none; overflow-y: auto; }
+
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-header-title { display: flex; align-items: center; gap: 8px; }
+.panel-header h2, .panel-header h3 {
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  letter-spacing: 0.4px; text-transform: uppercase;
+}
+
+/* 패널 접기 버튼 (신규) */
+.panel-collapse {
+  width: 20px; height: 20px; border-radius: 4px;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer; display: flex;
+  align-items: center; justify-content: center; font-size: 10px;
+  transition: all var(--t-fast); flex-shrink: 0;
+}
+.panel-collapse:hover { border-color: var(--border-hover); color: var(--text-primary); }
+
+.badge {
+  background: var(--bg-elevated); color: var(--text-secondary);
+  font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px;
+}
+
+/* ═══════════════════════════════════════════════
+   LEFT PANEL — THUMBNAILS (개선)
+   변경: 너비 220px / 썸네일 번호 오버레이 디자인 개선
+         수정된 페이지에 뱃지 표시
+═══════════════════════════════════════════════ */
+.thumbnail-container {
+  flex: 1; overflow-y: auto; padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.thumbnail-item {
+  position: relative; cursor: pointer; border-radius: var(--r-sm);
+  overflow: hidden; border: 2px solid transparent;
+  transition: all var(--t-fast); background: var(--bg-elevated);
+}
+.thumbnail-item:hover { border-color: var(--border-hover); }
+.thumbnail-item.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.thumbnail-item canvas { width: 100%; display: block; }
+
+/* 썸네일 번호 — 개선: 왼쪽 하단 배치, 더 선명 */
+.thumb-num {
+  position: absolute; bottom: 0; left: 0;
+  background: rgba(0,0,0,0.8); color: #fff;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 6px; border-top-right-radius: 4px;
+  letter-spacing: 0.3px;
+}
+/* 수정된 페이지 뱃지 (신규) */
+.thumb-edited {
+  position: absolute; top: 4px; right: 4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--teal); box-shadow: 0 0 6px rgba(14,165,233,0.6);
+}
+
+/* 썸네일 목 데이터 */
+.mock-thumb {
+  height: 110px; background: linear-gradient(135deg, #1e2430 0%, #2a3040 100%);
+  display: flex; align-items: center; justify-content: center;
+}
+.mock-thumb-lines { width: 70%; }
+.mock-line {
+  height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12);
+  margin-bottom: 6px;
+}
+.mock-line.title { height: 9px; width: 80%; background: rgba(255,255,255,0.2); }
+.mock-line.short { width: 55%; }
+
+/* ═══════════════════════════════════════════════
+   CENTER PANEL — CANVAS (개선)
+   변경: 빈 상태 개선 / 컨트롤바 재설계
+═══════════════════════════════════════════════ */
+/* ── 업로드 영역 ── */
+.upload-area {
+  flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px;
+}
+.upload-dropzone {
+  text-align: center; max-width: 480px; width: 100%;
+  padding: 60px 40px; border: 2px dashed rgba(99,102,241,0.3);
+  border-radius: var(--r-lg); transition: all var(--t-mid); cursor: pointer;
+  background: radial-gradient(ellipse at center, rgba(99,102,241,0.05) 0%, transparent 70%);
+}
+.upload-dropzone:hover, .upload-dropzone.drag { border-color: var(--accent); background: var(--accent-dim); }
+.upload-icon-wrap {
+  width: 80px; height: 80px; border-radius: var(--r-lg); margin: 0 auto 24px;
+  background: var(--accent-dim); display: flex; align-items: center; justify-content: center;
+}
+.upload-icon-wrap svg { width: 40px; height: 40px; color: var(--accent-light); }
+.upload-dropzone h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+.upload-dropzone p { color: var(--text-secondary); font-size: 13px; margin-bottom: 28px; line-height: 1.6; }
+.upload-tips {
+  display: flex; gap: 16px; margin-top: 24px; padding-top: 24px;
+  border-top: 1px solid var(--border); justify-content: center; flex-wrap: wrap;
+}
+.upload-tip {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-muted);
+}
+.tip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
+
+/* ── 캔버스 목 (활성 상태) ── */
+.canvas-mock {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 24px; overflow: auto;
+}
+.slide-mock {
+  width: 560px; height: 315px; border-radius: var(--r-md);
+  background: linear-gradient(160deg, #1a2035 0%, #252d45 100%);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255,255,255,0.05);
+  position: relative; display: flex; flex-direction: column;
+  padding: 32px 40px; flex-shrink: 0;
+}
+.slide-title-mock {
+  font-size: 22px; font-weight: 700; color: white; margin-bottom: 16px;
+  letter-spacing: -0.3px;
+}
+.slide-body-mock { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.slide-line { height: 7px; border-radius: 4px; background: rgba(255,255,255,0.15); }
+.slide-line.s  { width: 55%; }
+.slide-line.m  { width: 75%; }
+.slide-line.l  { width: 90%; }
+/* 깨진 글자 영역 (교정 대상) */
+.broken-box {
+  position: absolute; bottom: 60px; right: 48px;
+  padding: 6px 10px; background: rgba(248,81,73,0.15);
+  border: 1px dashed var(--error); border-radius: 4px;
+  font-size: 12px; color: #f85149; font-family: monospace; cursor: pointer;
+}
+.broken-box::after { content: ' ← 수정 대상'; font-size: 10px; opacity: 0.7; }
+/* 선택 박스 오버레이 */
+.select-overlay {
+  position: absolute; bottom: 52px; right: 40px;
+  width: 148px; height: 38px;
+  border: 2px solid var(--accent); background: rgba(99,102,241,0.15);
+  border-radius: 4px; pointer-events: none;
+}
+.select-overlay::before {
+  content: '선택됨'; position: absolute; top: -20px; left: 0;
+  font-size: 10px; color: var(--accent-light); white-space: nowrap;
+}
+
+/* ── 하단 컨트롤바 (개선) ── */
+.canvas-controls {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 16px; background: var(--bg-overlay); backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.icon-btn {
+  width: 32px; height: 32px; border-radius: var(--r-sm);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-secondary); cursor: pointer; display: flex;
+  align-items: center; justify-content: center; transition: all var(--t-fast);
+}
+.icon-btn:hover { color: var(--text-primary); border-color: var(--border-hover); }
+.icon-btn svg { width: 15px; height: 15px; }
+.v-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.zoom-slider {
+  width: 100px; height: 4px; -webkit-appearance: none; appearance: none;
+  background: var(--border); border-radius: 2px; cursor: pointer;
+}
+.zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  background: var(--accent); border-radius: 50%; cursor: pointer;
+}
+.zoom-label { font-size: 12px; color: var(--text-secondary); min-width: 44px; text-align: center; }
+/* 신규: 선택 힌트 칩 */
+.hint-chip {
+  margin-left: auto; display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; background: var(--teal-dim); border: 1px solid rgba(14,165,233,0.25);
+  border-radius: 20px; font-size: 11px; color: var(--teal);
+}
+.hint-chip svg { width: 12px; height: 12px; }
+
+/* ═══════════════════════════════════════════════
+   RIGHT PANEL — EDITOR (개선)
+   주요 변경:
+   1. OCR 결과 영역 개선 (로딩 스피너 통합)
+   2. 툴바 재설계 — B/I/U 36px, 글자색에 hex 표시
+   3. 액션 버튼 전면 재설계 — 아이콘 + 한 줄 레이블
+   4. 적용된 수정 목록 개선
+═══════════════════════════════════════════════ */
+.editor-form { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+.form-label {
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 5px;
+}
+
+/* ── OCR 결과 (개선) ── */
+.ocr-box {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 12px; font-size: 13px;
+  min-height: 56px; position: relative; line-height: 1.6;
+  color: var(--text-primary);
+}
+.ocr-box .ocr-placeholder { color: var(--text-muted); }
+/* 신규: 신뢰도 뱃지 */
+.ocr-confidence {
+  position: absolute; top: 8px; right: 8px;
+  padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 600;
+}
+.ocr-confidence.high { background: rgba(63,185,80,0.15); color: var(--success); }
+.ocr-confidence.low  { background: rgba(210,153,34,0.15); color: var(--warning); }
+
+/* ── 텍스트 입력 ── */
+.text-input {
+  width: 100%; padding: 10px 12px; background: var(--bg-elevated);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text-primary); font-family: var(--font); font-size: 14px;
+  resize: vertical; min-height: 72px; line-height: 1.6;
+  transition: border-color var(--t-fast);
+}
+.text-input:focus { outline: none; border-color: var(--accent); }
+
+/* ── 개선된 툴바 ── */
+.toolbar {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toolbar-section {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.toolbar-section:last-child { border-bottom: none; padding-bottom: 0; }
+.toolbar-section-label {
+  font-size: 10px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.toolbar-row { display: flex; align-items: center; gap: 5px; }
+
+/* 폰트 셀렉트 */
+.font-select {
+  flex: 1; height: 30px; background: var(--bg-app);
+  border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text-primary); font-family: var(--font); font-size: 12px;
+  padding: 0 6px; cursor: pointer;
+}
+.font-select:focus { outline: none; border-color: var(--accent); }
+
+/* 폰트 크기 스피너 (신규: +/- 버튼) */
+.font-size-spinner {
+  display: flex; align-items: center; border: 1px solid var(--border);
+  border-radius: 4px; overflow: hidden; background: var(--bg-app); height: 30px;
+}
+.spinner-btn {
+  width: 24px; height: 30px; background: var(--bg-elevated); border: none;
+  color: var(--text-secondary); cursor: pointer; font-size: 14px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--t-fast); flex-shrink: 0;
+}
+.spinner-btn:hover { background: var(--border); color: var(--text-primary); }
+.font-size-val {
+  width: 38px; text-align: center; font-size: 12px; color: var(--text-primary);
+  background: transparent; border: none; font-family: var(--font);
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+}
+.font-size-val:focus { outline: none; }
+
+/* B/I/U 버튼 (개선: 36px, 더 명확) */
+.fmt-btn-group {
+  display: flex; gap: 2px; background: var(--bg-app);
+  padding: 2px; border-radius: 5px; border: 1px solid var(--border);
+}
+.fmt-btn {
+  width: 34px; height: 28px; border-radius: 3px; border: none;
+  background: transparent; color: var(--text-secondary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--t-fast); font-family: var(--font); font-size: 13px; font-weight: 700;
+}
+.fmt-btn:hover { background: var(--border); color: var(--text-primary); }
+.fmt-btn.active { background: var(--accent); color: white; }
+
+/* 색상 피커 (개선: 스와치 + hex 코드 표시) */
+.color-picker-row {
+  display: flex; align-items: center; gap: 6px;
+}
+.color-swatch {
+  width: 30px; height: 30px; border-radius: 4px; border: 2px solid var(--border);
+  cursor: pointer; overflow: hidden; flex-shrink: 0;
+}
+.color-swatch input[type="color"] {
+  width: 40px; height: 40px; border: none; cursor: pointer;
+  transform: translate(-4px, -4px); margin: 0; padding: 0;
+  background: none;
+}
+.color-hex {
+  flex: 1; height: 30px; background: var(--bg-app); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text-secondary); font-size: 12px; font-family: monospace;
+  padding: 0 8px; display: flex; align-items: center;
+}
+.color-presets { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.color-preset {
+  width: 18px; height: 18px; border-radius: 3px; cursor: pointer;
+  border: 1.5px solid transparent; transition: all var(--t-fast);
+}
+.color-preset:hover { border-color: white; transform: scale(1.15); }
+
+/* 정렬 버튼 */
+.align-btn {
+  flex: 1; height: 28px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--bg-app); color: var(--text-secondary); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all var(--t-fast);
+}
+.align-btn:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.align-btn.active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-light); }
+.align-btn svg { width: 14px; height: 14px; }
+
+/* 불투명도 슬라이더 */
+.opacity-row { display: flex; align-items: center; gap: 8px; }
+.opacity-slider {
+  flex: 1; height: 4px; -webkit-appearance: none; appearance: none;
+  background: linear-gradient(to right, var(--bg-app), var(--text-primary));
+  border-radius: 2px; cursor: pointer;
+}
+.opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px;
+  background: white; border: 2px solid var(--accent); border-radius: 50%; cursor: pointer;
+}
+.opacity-val { font-size: 11px; color: var(--text-secondary); min-width: 32px; text-align: right; }
+
+/* ── 경고 알림 (개선) ── */
+.font-warning {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: var(--r-sm);
+  background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.25);
+  font-size: 11px; color: var(--warning);
+}
+.font-warning svg { width: 14px; height: 14px; flex-shrink: 0; }
+.font-warning a { color: var(--info); margin-left: auto; font-size: 11px; }
+
+/* ── 액션 버튼 (전면 재설계) ── */
+.action-btns { display: flex; flex-direction: column; gap: 6px; }
+/* 적용 버튼 — 가장 크고 눈에 띄게 */
+.action-apply {
+  width: 100%; padding: 12px 16px; border-radius: var(--r-md);
+  background: linear-gradient(135deg, var(--accent) 0%, #7c3aed 100%);
+  color: white; border: none; cursor: pointer; font-family: var(--font);
+  font-size: 14px; font-weight: 600; display: flex; align-items: center;
+  justify-content: center; gap: 8px; transition: all var(--t-fast);
+  box-shadow: var(--accent-glow);
+}
+.action-apply:hover { transform: translateY(-1px); }
+.action-apply svg { width: 16px; height: 16px; }
+/* 보조 버튼 행 */
+.action-row { display: flex; gap: 6px; }
+.action-secondary {
+  flex: 1; padding: 9px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  color: var(--text-secondary); cursor: pointer; font-family: var(--font);
+  font-size: 12px; font-weight: 500; display: flex; align-items: center;
+  justify-content: center; gap: 6px; transition: all var(--t-fast);
+}
+.action-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
+.action-secondary svg { width: 14px; height: 14px; }
+/* 워터마크 버튼 — 틸 강조 */
+.action-watermark {
+  flex: 1; padding: 9px 12px; border-radius: var(--r-sm);
+  border: 1px solid rgba(14,165,233,0.3); background: var(--teal-dim);
+  color: var(--teal); cursor: pointer; font-family: var(--font);
+  font-size: 12px; font-weight: 500; display: flex; align-items: center;
+  justify-content: center; gap: 6px; transition: all var(--t-fast);
+}
+.action-watermark:hover { border-color: var(--teal); }
+.action-watermark svg { width: 14px; height: 14px; }
+
+/* ── 수정 목록 (개선) ── */
+.overlay-list { border-top: 1px solid var(--border); }
+.overlay-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background var(--t-fast);
+}
+.overlay-item:last-child { border-bottom: none; }
+.overlay-item:hover { background: var(--bg-elevated); }
+.overlay-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0;
+}
+.overlay-dot.teal { background: var(--teal); }
+.overlay-label { flex: 1; font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overlay-page { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+.overlay-del { color: var(--text-muted); cursor: pointer; padding: 4px; font-size: 14px; line-height: 1; }
+.overlay-del:hover { color: var(--error); }
+
+/* ── 빈 상태 (개선) ── */
+.empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 32px 20px;
+  text-align: center; color: var(--text-muted);
+}
+.empty-icon {
+  width: 48px; height: 48px; border-radius: var(--r-md); margin-bottom: 14px;
+  background: var(--bg-elevated); display: flex; align-items: center; justify-content: center;
+}
+.empty-icon svg { width: 24px; height: 24px; opacity: 0.5; }
+.empty-state h4 { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.empty-state p { font-size: 12px; line-height: 1.6; }
+
+/* ═══════════════════════════════════════════════
+   키보드 단축키 패널 (신규)
+   '?' 버튼 클릭 시 표시
+═══════════════════════════════════════════════ */
+.kbd-panel {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 320px; background: var(--bg-surface);
+  border-left: 1px solid var(--border); z-index: 500;
+  transform: translateX(100%); transition: transform var(--t-mid);
+  display: flex; flex-direction: column;
+}
+.kbd-panel.open { transform: translateX(0); }
+.kbd-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.kbd-panel-header h3 { font-size: 14px; font-weight: 600; }
+.kbd-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; }
+.kbd-close:hover { color: var(--text-primary); }
+.kbd-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+.kbd-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.kbd-item:last-child { border-bottom: none; }
+.kbd-desc { font-size: 13px; color: var(--text-secondary); }
+.kbd-keys { display: flex; gap: 3px; }
+.kbd-key {
+  padding: 2px 7px; background: var(--bg-elevated);
+  border: 1px solid var(--border-hover); border-radius: 4px;
+  font-size: 11px; font-weight: 600; color: var(--text-primary);
+  font-family: 'Inter', monospace;
+}
+.kbd-group-title {
+  font-size: 10px; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 12px 0 4px;
+}
+
+/* ═══════════════════════════════════════════════
+   토스트 (개선)
+═══════════════════════════════════════════════ */
+.toast-wrap {
+  position: fixed; bottom: 56px; right: 24px; z-index: 600;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.toast-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px 16px; background: var(--bg-surface);
+  backdrop-filter: blur(12px); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg);
+  max-width: 320px; pointer-events: auto;
+  animation: toastIn 0.25s ease;
+}
+.toast-item.success { border-left: 3px solid var(--success); }
+.toast-item.error   { border-left: 3px solid var(--error); }
+.toast-item.info    { border-left: 3px solid var(--info); }
+.toast-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+.toast-body h4 { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.toast-body p  { font-size: 12px; color: var(--text-secondary); }
+@keyframes toastIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+/* ═══════════════════════════════════════════════
+   반응형 레이아웃 (신규)
+   Tablet: 768–1199px — 왼쪽 패널 숨김
+   Mobile: < 768px   — 하단 탭 바 방식
+═══════════════════════════════════════════════ */
+@media (max-width: 1199px) {
+  :root { --panel-left-w: 0px; }
+  .panel-left { display: none; }
+}
+@media (max-width: 767px) {
+  :root {
+    --panel-right-w: 100%;
+    --header-h: 52px;
+    --step-bar-h: 36px;
+  }
+  .main-content { flex-direction: column; }
+  .panel-center { min-height: 45vh; }
+  .panel-right  { border-top: 1px solid var(--border); }
+  .header-logo .logo-text .logo-sub { display: none; }
+}
+
+/* ═══════════════════════════════════════════════
+   스크롤바
+═══════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-elevated); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+/* ───────────────────────────────────────── */
+.mt-2 { margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<!-- ─── DEMO BAR ───────────────────────────────────── -->
+<div class="demo-bar">
+  <span>🎨 UI 개선안 프로토타입</span>
+  <div class="demo-sep"></div>
+  화면 상태:
+  <button class="demo-btn active" onclick="setView('upload')">① 업로드 전</button>
+  <button class="demo-btn" onclick="setView('editing')">② 편집 중 (PDF 로드됨)</button>
+  <button class="demo-btn" onclick="setView('done')">③ 수정 완료</button>
+  <div class="demo-sep"></div>
+  <button class="demo-btn" onclick="toggleKbd()">⌨️ 단축키 패널</button>
+</div>
+
+<!-- ─── HEADER ──────────────────────────────────────── -->
+<header class="header">
+  <div class="header-logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    </div>
+    <div class="logo-text">
+      <h1>NotebookLM 슬라이드 닥터</h1>
+      <div class="logo-sub">한글 폰트 교정 도구</div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-kbd" title="키보드 단축키 (?)">?</button>
+    <button class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      초기화
+    </button>
+    <button class="btn btn-primary" id="downloadBtn" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      PDF 다운로드
+    </button>
+  </div>
+</header>
+
+<!-- ─── STEP BAR (신규) ──────────────────────────────── -->
+<div class="step-bar">
+  <div class="step-item" id="step1">
+    <div class="step-num">1</div>
+    PDF 업로드
+  </div>
+  <span class="step-arrow">›</span>
+  <div class="step-item" id="step2">
+    <div class="step-num">2</div>
+    영역 선택
+  </div>
+  <span class="step-arrow">›</span>
+  <div class="step-item" id="step3">
+    <div class="step-num">3</div>
+    텍스트 편집
+  </div>
+  <span class="step-arrow">›</span>
+  <div class="step-item" id="step4">
+    <div class="step-num">4</div>
+    다운로드
+  </div>
+</div>
+
+<!-- ─── MAIN ─────────────────────────────────────────── -->
+<div class="main-content">
+
+  <!-- LEFT: 썸네일 패널 -->
+  <aside class="panel panel-left">
+    <div class="panel-header">
+      <div class="panel-header-title">
+        <h2>페이지</h2>
+        <span class="badge" id="pageCount">8</span>
+      </div>
+      <button class="panel-collapse" title="패널 접기">‹</button>
+    </div>
+    <div class="thumbnail-container" id="thumbContainer">
+      <!-- 썸네일 목 데이터 -->
+    </div>
+  </aside>
+
+  <!-- CENTER: 캔버스 -->
+  <section class="panel panel-center">
+
+    <!-- 업로드 영역 (초기 상태) -->
+    <div class="upload-area" id="uploadView">
+      <div class="upload-dropzone" id="dropzone">
+        <div class="upload-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <path d="M12 18v-6"/><path d="M9 15l3-3 3 3"/>
+          </svg>
+        </div>
+        <h3>PDF 파일을 드래그하거나 클릭하세요</h3>
+        <p>NotebookLM에서 생성된 슬라이드 PDF를<br>업로드하면 깨진 한글을 수정할 수 있습니다.</p>
+        <button class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+          </svg>
+          파일 선택
+        </button>
+        <div class="upload-tips">
+          <div class="upload-tip"><div class="tip-dot"></div> PDF만 지원</div>
+          <div class="upload-tip"><div class="tip-dot"></div> 서버에 전송 안 됨</div>
+          <div class="upload-tip"><div class="tip-dot"></div> 최대 100MB</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 캔버스 뷰 (PDF 로드 후) -->
+    <div class="canvas-mock" id="canvasView" style="display:none">
+      <div class="slide-mock">
+        <div class="slide-title-mock">AI 활용 연구 동향 2025</div>
+        <div class="slide-body-mock">
+          <div class="slide-line l"></div>
+          <div class="slide-line m"></div>
+          <div class="slide-line s"></div>
+          <div class="slide-line l"></div>
+          <div class="slide-line m"></div>
+        </div>
+        <!-- 깨진 글자 영역 -->
+        <div class="broken-box" id="brokenBox">뻁뻌뺵뻀뻁</div>
+        <!-- 선택 박스 (편집 모드) -->
+        <div class="select-overlay" id="selectOverlay" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- 하단 컨트롤바 -->
+    <div class="canvas-controls" id="canvasCtrl" style="display:none">
+      <button class="icon-btn" title="화면에 맞춤">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+      <div class="v-divider"></div>
+      <button class="icon-btn" title="축소 (-)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+      </button>
+      <input type="range" class="zoom-slider" min="25" max="200" value="100">
+      <button class="icon-btn" title="확대 (+)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+      </button>
+      <span class="zoom-label">100%</span>
+      <div class="v-divider"></div>
+      <div class="hint-chip" id="hintChip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 6s+2-2 5-2 5 2 5 2M1 12s+2-2 5-2 5 2 5 2M1 18s+2-2 5-2 5 2 5 2"/>
+        </svg>
+        드래그하여 수정할 영역 선택
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: 편집 패널 -->
+  <aside class="panel panel-right">
+    <div class="panel-header">
+      <div class="panel-header-title">
+        <h2>텍스트 편집</h2>
+      </div>
+    </div>
+
+    <!-- 빈 상태 -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M9 9h6M9 13h6M9 17h4"/>
+        </svg>
+      </div>
+      <h4 id="emptyTitle">PDF를 먼저 업로드하세요</h4>
+      <p id="emptyDesc">파일을 업로드하고<br>수정할 영역을 드래그하면<br>여기에 편집 도구가 표시됩니다.</p>
+    </div>
+
+    <!-- 편집 폼 -->
+    <div class="editor-form" id="editorForm" style="display:none">
+
+      <!-- OCR 결과 -->
+      <div>
+        <div class="form-label">🔍 OCR 인식 결과</div>
+        <div class="ocr-box">
+          <span id="ocrText">뻁뻌뺵뻀뻁 (인식 완료)</span>
+          <div class="ocr-confidence high">신뢰도 94%</div>
+        </div>
+      </div>
+
+      <!-- 텍스트 입력 -->
+      <div>
+        <div class="form-label">✏️ 수정할 텍스트</div>
+        <textarea class="text-input" placeholder="수정할 텍스트를 입력하세요" rows="3">연구 동향 분석</textarea>
+      </div>
+
+      <!-- 툴바 -->
+      <div class="toolbar">
+        <!-- 글꼴 섹션 -->
+        <div class="toolbar-section">
+          <div class="toolbar-section-label">글꼴</div>
+          <div class="toolbar-row">
+            <select class="font-select">
+              <option>Pretendard Regular</option>
+              <option>Pretendard Bold</option>
+              <option>나눔고딕</option>
+              <option>맑은 고딕</option>
+            </select>
+          </div>
+          <div class="toolbar-row">
+            <!-- 폰트 크기 스피너 -->
+            <div class="font-size-spinner">
+              <button class="spinner-btn">−</button>
+              <input class="font-size-val" value="24" type="number" min="8" max="200">
+              <button class="spinner-btn">+</button>
+            </div>
+            <div class="v-divider"></div>
+            <!-- B/I/U -->
+            <div class="fmt-btn-group">
+              <button class="fmt-btn active" title="굵게 (Ctrl+B)"><b>B</b></button>
+              <button class="fmt-btn" title="기울임 (Ctrl+I)"><i>I</i></button>
+              <button class="fmt-btn" title="밑줄 (Ctrl+U)" style="text-decoration:underline">U</button>
+            </div>
+          </div>
+          <!-- 글자색 피커 (개선) -->
+          <div class="toolbar-row color-picker-row">
+            <div class="color-swatch">
+              <input type="color" value="#000000">
+            </div>
+            <div class="color-hex">#000000</div>
+          </div>
+          <div class="color-presets">
+            <div class="color-preset" style="background:#000000" title="검정"></div>
+            <div class="color-preset" style="background:#ffffff;border-color:#666" title="흰색"></div>
+            <div class="color-preset" style="background:#1e3a5f" title="진청"></div>
+            <div class="color-preset" style="background:#2563eb" title="파랑"></div>
+            <div class="color-preset" style="background:#dc2626" title="빨강"></div>
+            <div class="color-preset" style="background:#16a34a" title="초록"></div>
+            <div class="color-preset" style="background:#d97706" title="주황"></div>
+            <div class="color-preset" style="background:#7c3aed" title="보라"></div>
+          </div>
+        </div>
+
+        <!-- 단락 섹션 -->
+        <div class="toolbar-section">
+          <div class="toolbar-section-label">단락</div>
+          <div class="toolbar-row">
+            <button class="align-btn active" title="왼쪽 정렬">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="21" y1="6" x2="3" y2="6"/><line x1="17" y1="10" x2="3" y2="10"/>
+                <line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>
+              </svg>
+            </button>
+            <button class="align-btn" title="가운데 정렬">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="21" y1="6" x2="3" y2="6"/><line x1="18" y1="10" x2="6" y2="10"/>
+                <line x1="21" y1="14" x2="3" y2="14"/><line x1="18" y1="18" x2="6" y2="18"/>
+              </svg>
+            </button>
+            <button class="align-btn" title="오른쪽 정렬">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="10" x2="7" y2="10"/>
+                <line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- 효과 섹션 -->
+        <div class="toolbar-section">
+          <div class="toolbar-section-label">배경 불투명도</div>
+          <div class="opacity-row">
+            <input type="range" class="opacity-slider" min="0" max="100" value="100">
+            <span class="opacity-val">100%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 폰트 경고 -->
+      <div class="font-warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span>Pretendard 폰트가 설치되지 않았습니다.</span>
+        <a href="#">다운로드</a>
+      </div>
+
+      <!-- 액션 버튼 (재설계) -->
+      <div class="action-btns">
+        <button class="action-apply">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          이 페이지에 적용
+        </button>
+        <div class="action-row">
+          <button class="action-secondary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            미리보기
+          </button>
+          <button class="action-watermark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3l18 18M10.5 10.677A2 2 0 0013.5 13.5M7.362 7.561A6 6 0 0116.5 14.1M3 3s2 2 3.5 4.5M21 21s-2-2-3.5-4.5"/>
+            </svg>
+            전체 워터마크 제거
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 적용된 수정 목록 -->
+    <div class="overlay-list" id="overlayList" style="display:none">
+      <div class="panel-header">
+        <div class="panel-header-title">
+          <h3>적용된 수정</h3>
+          <span class="badge">3</span>
+        </div>
+        <button style="background:none;border:none;color:#6366f1;cursor:pointer;font-size:12px;">모두 삭제</button>
+      </div>
+      <div class="overlay-item">
+        <div class="overlay-dot"></div>
+        <span class="overlay-label">연구 동향 분석</span>
+        <span class="overlay-page">p.2</span>
+        <span class="overlay-del">✕</span>
+      </div>
+      <div class="overlay-item">
+        <div class="overlay-dot teal"></div>
+        <span class="overlay-label">AI 활용 현황</span>
+        <span class="overlay-page">p.4</span>
+        <span class="overlay-del">✕</span>
+      </div>
+      <div class="overlay-item">
+        <div class="overlay-dot"></div>
+        <span class="overlay-label">결론 및 제언</span>
+        <span class="overlay-page">p.8</span>
+        <span class="overlay-del">✕</span>
+      </div>
+    </div>
+  </aside>
+</div><!-- /main-content -->
+
+<!-- ─── 키보드 단축키 패널 ───────────────────────── -->
+<div class="kbd-panel" id="kbdPanel">
+  <div class="kbd-panel-header">
+    <h3>⌨️ 키보드 단축키</h3>
+    <button class="kbd-close" onclick="toggleKbd()">✕</button>
+  </div>
+  <div class="kbd-list">
+    <div class="kbd-group-title">서식</div>
+    <div class="kbd-item">
+      <span class="kbd-desc">굵게</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">B</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">기울임꼴</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">I</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">밑줄</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">U</span></div>
+    </div>
+    <div class="kbd-group-title">탐색</div>
+    <div class="kbd-item">
+      <span class="kbd-desc">이전 페이지</span>
+      <div class="kbd-keys"><span class="kbd-key">←</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">다음 페이지</span>
+      <div class="kbd-keys"><span class="kbd-key">→</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">확대</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">+</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">축소</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">−</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">화면에 맞춤</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">0</span></div>
+    </div>
+    <div class="kbd-group-title">작업</div>
+    <div class="kbd-item">
+      <span class="kbd-desc">수정 적용</span>
+      <div class="kbd-keys"><span class="kbd-key">Ctrl</span><span class="kbd-key">Enter</span></div>
+    </div>
+    <div class="kbd-item">
+      <span class="kbd-desc">단축키 도움말</span>
+      <div class="kbd-keys"><span class="kbd-key">?</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 토스트 샘플 ───────────────────────────────── -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ── 썸네일 생성 ──────────────────────────────────────
+const thumbContainer = document.getElementById('thumbContainer');
+for (let i = 1; i <= 8; i++) {
+  const item = document.createElement('div');
+  item.className = 'thumbnail-item' + (i === 2 ? ' active' : '');
+  item.innerHTML = `
+    <div class="mock-thumb">
+      <div class="mock-thumb-lines">
+        <div class="mock-line title"></div>
+        <div class="mock-line"></div>
+        <div class="mock-line short"></div>
+        <div class="mock-line"></div>
+      </div>
+    </div>
+    <div class="thumb-num">${i}</div>
+    ${i === 2 || i === 4 ? '<div class="thumb-edited"></div>' : ''}
+  `;
+  item.onclick = () => {
+    document.querySelectorAll('.thumbnail-item').forEach(t => t.classList.remove('active'));
+    item.classList.add('active');
+  };
+  thumbContainer.appendChild(item);
+}
+
+// ── 데모 뷰 전환 ─────────────────────────────────────
+function setView(v) {
+  document.querySelectorAll('.demo-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const upload   = document.getElementById('uploadView');
+  const canvas   = document.getElementById('canvasView');
+  const ctrl     = document.getElementById('canvasCtrl');
+  const empty    = document.getElementById('emptyState');
+  const form     = document.getElementById('editorForm');
+  const overlays = document.getElementById('overlayList');
+  const dl       = document.getElementById('downloadBtn');
+  const sel      = document.getElementById('selectOverlay');
+  const step1    = document.getElementById('step1');
+  const step2    = document.getElementById('step2');
+  const step3    = document.getElementById('step3');
+  const step4    = document.getElementById('step4');
+
+  [step1,step2,step3,step4].forEach(s => s.className = 'step-item');
+
+  if (v === 'upload') {
+    upload.style.display = 'flex'; canvas.style.display = 'none'; ctrl.style.display = 'none';
+    empty.style.display = 'flex'; form.style.display = 'none'; overlays.style.display = 'none';
+    dl.disabled = true; sel.style.display = 'none';
+    step1.classList.add('active');
+    document.getElementById('emptyTitle').textContent = 'PDF를 먼저 업로드하세요';
+    document.getElementById('emptyDesc').textContent = '파일을 업로드하고\n수정할 영역을 드래그하면\n여기에 편집 도구가 표시됩니다.';
+  } else if (v === 'editing') {
+    upload.style.display = 'none'; canvas.style.display = 'flex'; ctrl.style.display = 'flex';
+    empty.style.display = 'none'; form.style.display = 'flex'; overlays.style.display = 'none';
+    dl.disabled = true; sel.style.display = 'block';
+    step1.classList.add('done'); step2.classList.add('done'); step3.classList.add('active');
+    showToast('info', 'OCR 완료', '인식 신뢰도 94% — 텍스트를 확인·수정하세요.');
+  } else if (v === 'done') {
+    upload.style.display = 'none'; canvas.style.display = 'flex'; ctrl.style.display = 'flex';
+    empty.style.display = 'none'; form.style.display = 'none'; overlays.style.display = 'block';
+    dl.disabled = false; sel.style.display = 'none';
+    step1.classList.add('done'); step2.classList.add('done');
+    step3.classList.add('done'); step4.classList.add('active');
+    showToast('success', '수정 적용 완료', '3개 수정이 저장되었습니다. 다운로드하세요.');
+  }
+}
+
+// ── 키보드 패널 토글 ────────────────────────────────
+function toggleKbd() {
+  document.getElementById('kbdPanel').classList.toggle('open');
+}
+document.querySelector('.btn-kbd').onclick = toggleKbd;
+
+// ── 토스트 ───────────────────────────────────────────
+function showToast(type, title, msg) {
+  const wrap = document.getElementById('toastWrap');
+  const icons = {
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="#3fb950" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>',
+    error:   '<svg viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    info:    '<svg viewBox="0 0 24 24" fill="none" stroke="#58a6ff" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  };
+  const t = document.createElement('div');
+  t.className = `toast-item ${type}`;
+  t.innerHTML = `<div class="toast-icon">${icons[type]||''}</div><div class="toast-body"><h4>${title}</h4><p>${msg}</p></div>`;
+  wrap.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.4s'; setTimeout(() => t.remove(), 400); }, 3500);
+}
+</script>
+</body>
+</html>

@@ -88,10 +88,6 @@
         bgColor: document.getElementById('bgColor'),
         bgColorHex: document.getElementById('bgColorHex'),
 
-        // 스포이드 (EyeDropper)
-        eyeDropperFontBtn: document.getElementById('eyeDropperFontBtn'),
-        eyeDropperBgBtn: document.getElementById('eyeDropperBgBtn'),
-
         // OCR 신뢰도
         ocrConfidence: document.getElementById('ocrConfidence'),
 
@@ -99,19 +95,32 @@
         step1: document.getElementById('step1'),
         step2: document.getElementById('step2'),
         step3: document.getElementById('step3'),
-        step4: document.getElementById('step4'),
-
-        // ── 디버그 콘솔 ──
-        debugPanel: document.getElementById('debugPanel'),
-        debugCloseBtn: document.getElementById('debugCloseBtn'),
-        debugClearBtn: document.getElementById('debugClearBtn'),
-        debugStateView: document.getElementById('debugStateView'),
-        debugLogView: document.getElementById('debugLogView'),
-        debugLogCount: document.getElementById('debugLogCount')
+        step4: document.getElementById('step4')
     };
 
     // Application State
-    // Application State는 이제 js/state-manager.js의 AppState 싱글톤이 담당합니다.
+    const state = {
+        currentPage: 1,
+        totalPages: 0,
+        isSelecting: false,
+        selectionStart: null,
+        selectionRect: null,
+        currentOverlayId: null,
+        extractedBgColor: '#FFFFFF', // [Fix-1] 추출된 배경색 캐시
+        // 미리보기 오버레이 드래그 상태
+        previewOverlay: null,
+        isDraggingOverlay: false,
+        dragStart: null,
+        // 리사이즈 상태
+        isResizingOverlay: false,
+        resizeHandle: null,
+        // 리치 텍스트 상태
+        textAlign: 'left',
+        isBold: false,
+        isItalic: false,
+        isUnderline: false,
+        bgOpacity: 100
+    };
 
     // ========================================
     // Initialization
@@ -135,17 +144,7 @@
         libCheck.forEach(l => console.log('[초기화]', l.name, l.loaded ? '✅' : '❌ 로딩 실패'));
 
         bindEvents();
-        AppState.subscribe(syncUI);
         console.log('NotebookLM 슬라이드 닥터 초기화 완료');
-    }
-
-    // ========================================
-    // UI 동기화 (단방향 데이터 흐름)
-    // ========================================
-    function syncUI() {
-        updateToolbarUI();
-        updateLivePreview();
-        updateDebugPanel();
     }
 
     function bindEvents() {
@@ -183,7 +182,8 @@
             elements.bgColor.addEventListener('input', () => {
                 const c = elements.bgColor.value;
                 if (elements.bgColorHex) elements.bgColorHex.value = c;
-                AppState.setState({ extractedBgColor: c });
+                state.extractedBgColor = c;
+                updateLivePreview();
             });
         }
         if (elements.bgColorHex) {
@@ -192,7 +192,8 @@
                 if (!v.startsWith('#')) v = '#' + v;
                 if (/^#[0-9a-fA-F]{6}$/.test(v)) {
                     elements.bgColor.value = v;
-                    AppState.setState({ extractedBgColor: v });
+                    state.extractedBgColor = v;
+                    updateLivePreview();
                 }
             });
         }
@@ -206,20 +207,6 @@
         elements.btnAlignLeft.addEventListener('click', () => setAlignment('left'));
         elements.btnAlignCenter.addEventListener('click', () => setAlignment('center'));
         elements.btnAlignRight.addEventListener('click', () => setAlignment('right'));
-
-        // 스포이드 (EyeDropper API)
-        if (window.EyeDropper) {
-            if (elements.eyeDropperFontBtn) {
-                elements.eyeDropperFontBtn.addEventListener('click', () => handleEyeDropper('font'));
-            }
-            if (elements.eyeDropperBgBtn) {
-                elements.eyeDropperBgBtn.addEventListener('click', () => handleEyeDropper('bg'));
-            }
-        } else {
-            // EyeDropper API 미지원 브라우저에서는 버튼 숨기기
-            if (elements.eyeDropperFontBtn) elements.eyeDropperFontBtn.hidden = true;
-            if (elements.eyeDropperBgBtn) elements.eyeDropperBgBtn.hidden = true;
-        }
 
         // Actions
         elements.previewBtn.addEventListener('click', handlePreview);
@@ -249,21 +236,13 @@
             if (e.key === 'Escape') {
                 closeKbdPanel();
                 // 선택 영역이 있고 아직 적용 전이면 취소
-                if (AppState.get('selectionRect') || AppState.get('previewOverlay')) {
+                if (state.selectionRect || state.previewOverlay) {
                     clearSelection();
                 }
                 return;
             }
 
             if (!e.ctrlKey && !e.metaKey) return;
-
-            // Ctrl+Shift+D → 디버그 콘솔 토글
-            if (e.shiftKey && e.key.toLowerCase() === 'd') {
-                e.preventDefault();
-                toggleDebugPanel();
-                return;
-            }
-
             const active = document.activeElement;
             if (active && active.tagName === 'SELECT') return;
 
@@ -295,7 +274,7 @@
         // ── 선택 영역 외부 클릭 시 선택 취소 ──────────────────────────────────
         document.addEventListener('mousedown', (e) => {
             // 선택 영역이 없거나 현재 드래그 중이면 무시
-            if (!AppState.get('selectionRect') || AppState.get('isSelecting')) return;
+            if (!state.selectionRect || state.isSelecting) return;
 
             // 아래 요소 내부 클릭은 정상 작동 (선택 유지)
             const keepElements = [
@@ -374,33 +353,6 @@
                 updateLivePreview();
             });
         }
-
-        // ── 디버그 콘솔 이벤트 ──
-        if (elements.debugCloseBtn) {
-            elements.debugCloseBtn.addEventListener('click', toggleDebugPanel);
-        }
-        if (elements.debugClearBtn) {
-            elements.debugClearBtn.addEventListener('click', () => {
-                AppState.clearHistory();
-                updateDebugPanel();
-            });
-        }
-        if (elements.debugPanel) {
-            elements.debugPanel.querySelectorAll('.debug-tab').forEach(tab => {
-                tab.addEventListener('click', () => {
-                    const tabName = tab.dataset.tab;
-                    elements.debugPanel.querySelectorAll('.debug-tab').forEach(t => t.classList.remove('active'));
-                    tab.classList.add('active');
-                    elements.debugPanel.querySelectorAll('.debug-content').forEach(c => c.classList.remove('active'));
-                    if (tabName === 'state') {
-                        elements.debugStateView.classList.add('active');
-                    } else {
-                        elements.debugLogView.classList.add('active');
-                    }
-                    updateDebugPanel();
-                });
-            });
-        }
     }
 
     // ========================================
@@ -416,64 +368,6 @@
             if (n < stepNum) el.classList.add('done');
             else if (n === stepNum) el.classList.add('active');
         });
-    }
-
-    // ========================================
-    // 디버그 콘솔 (Ctrl+Shift+D)
-    // ========================================
-
-    function toggleDebugPanel() {
-        if (!elements.debugPanel) return;
-        const isOpen = !elements.debugPanel.hidden;
-        elements.debugPanel.hidden = isOpen;
-        if (!isOpen) updateDebugPanel();
-    }
-
-    function updateDebugPanel() {
-        if (!elements.debugPanel || elements.debugPanel.hidden) return;
-
-        // 상태 탭 갱신
-        if (elements.debugStateView && elements.debugStateView.classList.contains('active')) {
-            const state = AppState.getAll();
-            // 값을 사람이 읽기 좋게 포맷팅 (null, 객체, 배열 등)
-            const formatted = {};
-            for (const [k, v] of Object.entries(state)) {
-                if (v === null) formatted[k] = null;
-                else if (typeof v === 'object') formatted[k] = v;
-                else formatted[k] = v;
-            }
-            elements.debugStateView.textContent = JSON.stringify(formatted, null, 2);
-        }
-
-        // 로그 탭 갱신
-        const history = AppState.getHistory();
-        if (elements.debugLogCount) {
-            elements.debugLogCount.textContent = history.length;
-        }
-
-        if (elements.debugLogView && elements.debugLogView.classList.contains('active')) {
-            if (history.length === 0) {
-                elements.debugLogView.innerHTML = '<div class="debug-log-empty">상태 변경 이력이 없습니다</div>';
-            } else {
-                // 최신 것이 위로 (역순)
-                const html = history.slice().reverse().map(entry => {
-                    const changesStr = Object.entries(entry.changes)
-                        .map(([k, v]) => {
-                            const val = v === null ? 'null'
-                                : typeof v === 'object' ? JSON.stringify(v)
-                                    : String(v);
-                            return `${k}: ${val}`;
-                        })
-                        .join(', ');
-                    return `<div class="debug-log-entry">` +
-                        `<span class="debug-log-time">${entry.time}</span>` +
-                        `<span class="debug-log-source">[${entry.source}]</span>` +
-                        `<span class="debug-log-changes">${Utils.escapeHtml(changesStr)}</span>` +
-                        `</div>`;
-                }).join('');
-                elements.debugLogView.innerHTML = html;
-            }
-        }
     }
 
     // ========================================
@@ -551,13 +445,13 @@
 
         try {
             console.log('PDF 파일 로딩 시작:', file.name, file.size, 'bytes');
-            AppState.setState({ originalFileName: file.name }); // 원본 파일명 저장
+            state.originalFileName = file.name; // 원본 파일명 저장
 
             const result = await PDFHandler.loadPDF(file);
-            AppState.setState({ totalPages: result.numPages });
-            AppState.setState({ currentPage: 1 });
+            state.totalPages = result.numPages;
+            state.currentPage = 1;
 
-            elements.pageCount.textContent = AppState.get('totalPages');
+            elements.pageCount.textContent = state.totalPages;
 
             // UI 전환
             elements.uploadArea.hidden = true;
@@ -602,7 +496,7 @@
 
         // 1단계: 모든 DOM 요소 먼저 생성 (레이아웃 미리 확정)
         const canvasMap = new Map(); // pageNum → canvas 참조
-        for (let i = 1; i <= AppState.get('totalPages'); i++) {
+        for (let i = 1; i <= state.totalPages; i++) {
             const item = document.createElement('div');
             item.className = 'thumbnail-item' + (i === 1 ? ' active' : '');
             item.dataset.page = i;
@@ -620,8 +514,8 @@
         }
 
         // 2단계: BATCH_SIZE 단위로 병렬 렌더링
-        for (let start = 1; start <= AppState.get('totalPages'); start += BATCH_SIZE) {
-            const end = Math.min(start + BATCH_SIZE - 1, AppState.get('totalPages'));
+        for (let start = 1; start <= state.totalPages; start += BATCH_SIZE) {
+            const end = Math.min(start + BATCH_SIZE - 1, state.totalPages);
             const batch = [];
             for (let i = start; i <= end; i++) {
                 batch.push(PDFHandler.renderThumbnail(i, canvasMap.get(i)));
@@ -631,7 +525,7 @@
     }
 
     async function renderCurrentPage() {
-        await PDFHandler.renderPage(AppState.get('currentPage'), elements.pdfCanvas);
+        await PDFHandler.renderPage(state.currentPage, elements.pdfCanvas);
 
         // 오버레이 캔버스 크기 동기화
         elements.overlayCanvas.width = elements.pdfCanvas.width;
@@ -644,7 +538,7 @@
         // 기존 오버레이 렌더링
         TextOverlay.renderPageOverlays(
             elements.overlayCanvas,
-            AppState.get('currentPage'),
+            state.currentPage,
             PDFHandler.getScale()
         );
 
@@ -653,9 +547,9 @@
     }
 
     async function goToPage(pageNum) {
-        if (pageNum < 1 || pageNum > AppState.get('totalPages')) return;
+        if (pageNum < 1 || pageNum > state.totalPages) return;
 
-        AppState.setState({ currentPage: pageNum });
+        state.currentPage = pageNum;
 
         // 썸네일 활성 상태 업데이트
         document.querySelectorAll('.thumbnail-item').forEach(item => {
@@ -690,8 +584,8 @@
         const containerHeight = elements.canvasContainer.clientHeight - 40;
 
         // 현재 PDF 페이지 크기 가져오기 (스케일 1 기준)
-        // AppState.get('currentPage')를 명시적으로 전달하여 렌더링 전이라도 페이지 정보 획득
-        const page = await PDFHandler.getPageObject(AppState.get('currentPage'));
+        // state.currentPage를 명시적으로 전달하여 렌더링 전이라도 페이지 정보 획득
+        const page = await PDFHandler.getPageObject(state.currentPage);
         if (!page) return;
 
         const viewport = page.getViewport({ scale: 1 });
@@ -722,58 +616,56 @@
     function handleSelectionStart(e) {
         // [Fix] 새 선택 시작 시 이전 previewOverlay 초기화 (Stale State 방지)
         // 이전 오버레이가 남아있으면 새 영역의 폰트가 이전 좌표에 렌더링되는 버그 발생
-        AppState.setState({ previewOverlay: null });
+        state.previewOverlay = null;
         elements.overlayCanvas.style.pointerEvents = 'none';
         elements.overlayCanvas.style.cursor = 'default';
 
-        const mousePos = Utils.getMousePosOnCanvas(elements.pdfCanvas, e);
+        const canvasRect = elements.pdfCanvas.getBoundingClientRect();
         const offset = getCanvasOffset();
 
-        AppState.setState({ isSelecting: true });
-        AppState.setState({
-            selectionStart: {
-                x: mousePos.x,
-                y: mousePos.y
-            }
-        });
+        state.isSelecting = true;
+        state.selectionStart = {
+            x: e.clientX - canvasRect.left,
+            y: e.clientY - canvasRect.top
+        };
 
         elements.selectionBox.hidden = false;
-        elements.selectionBox.style.left = (offset.left + AppState.get('selectionStart').x) + 'px';
-        elements.selectionBox.style.top = (offset.top + AppState.get('selectionStart').y) + 'px';
+        elements.selectionBox.style.left = (offset.left + state.selectionStart.x) + 'px';
+        elements.selectionBox.style.top = (offset.top + state.selectionStart.y) + 'px';
         elements.selectionBox.style.width = '0';
         elements.selectionBox.style.height = '0';
     }
 
     function handleSelectionMove(e) {
-        if (!AppState.get('isSelecting')) return;
+        if (!state.isSelecting) return;
 
-        const mousePos = Utils.getMousePosOnCanvas(elements.pdfCanvas, e);
+        const canvasRect = elements.pdfCanvas.getBoundingClientRect();
         const offset = getCanvasOffset();
 
-        const currentX = mousePos.x;
-        const currentY = mousePos.y;
+        const currentX = e.clientX - canvasRect.left;
+        const currentY = e.clientY - canvasRect.top;
 
-        const x = Math.min(AppState.get('selectionStart').x, currentX);
-        const y = Math.min(AppState.get('selectionStart').y, currentY);
-        const width = Math.abs(currentX - AppState.get('selectionStart').x);
-        const height = Math.abs(currentY - AppState.get('selectionStart').y);
+        const x = Math.min(state.selectionStart.x, currentX);
+        const y = Math.min(state.selectionStart.y, currentY);
+        const width = Math.abs(currentX - state.selectionStart.x);
+        const height = Math.abs(currentY - state.selectionStart.y);
 
         elements.selectionBox.style.left = (offset.left + x) + 'px';
         elements.selectionBox.style.top = (offset.top + y) + 'px';
         elements.selectionBox.style.width = width + 'px';
         elements.selectionBox.style.height = height + 'px';
 
-        AppState.setState({ selectionRect: { x, y, width, height } });
+        state.selectionRect = { x, y, width, height };
     }
 
     async function handleSelectionEnd(e) {
-        if (!AppState.get('isSelecting')) return;
-        AppState.setState({ isSelecting: false });
+        if (!state.isSelecting) return;
+        state.isSelecting = false;
 
         // 최소 크기 확인
-        if (!AppState.get('selectionRect') ||
-            AppState.get('selectionRect').width < 10 ||
-            AppState.get('selectionRect').height < 10) {
+        if (!state.selectionRect ||
+            state.selectionRect.width < 10 ||
+            state.selectionRect.height < 10) {
             clearSelection();
             return;
         }
@@ -787,17 +679,17 @@
         const scale = PDFHandler.getScale();
         const backgroundColor = TextOverlay.extractBackgroundColor(
             elements.pdfCanvas,
-            AppState.get('selectionRect'),
+            state.selectionRect,
             scale
         );
         const textColor = TextOverlay.extractTextColor(
             elements.pdfCanvas,
-            AppState.get('selectionRect'),
+            state.selectionRect,
             backgroundColor
         );
 
         // [Fix-1] 추출된 배경색을 state에 캐시 (handlePreview/handleApply에서 재사용)
-        AppState.setState({ extractedBgColor: backgroundColor });
+        state.extractedBgColor = backgroundColor;
 
         // 추출된 색상을 입력 필드에 적용
         elements.fontColor.value = textColor;
@@ -813,7 +705,7 @@
 
     function clearSelection() {
         elements.selectionBox.hidden = true;
-        AppState.setState({ selectionRect: null });
+        state.selectionRect = null;
 
         elements.editorContent.hidden = false;
         const emptyState = elements.editorContent.querySelector('.empty-state');
@@ -822,83 +714,60 @@
         elements.editorForm.hidden = true;
 
         // 미리보기 상태 초기화
-        AppState.setState({ previewOverlay: null });
-        AppState.setState({ isDraggingOverlay: false });
-        AppState.setState({ dragStart: null });
+        state.previewOverlay = null;
+        state.isDraggingOverlay = false;
+        state.dragStart = null;
 
         // 리사이즈 상태 초기화
-        AppState.setState({ isResizingOverlay: false });
-        AppState.setState({ resizeHandle: null });
+        state.isResizingOverlay = false;
+        state.resizeHandle = null;
 
         // 리치 텍스트 상태 초기화
-        AppState.setState({ textAlign: 'left' });
-        AppState.setState({ isBold: false });
-        AppState.setState({ isItalic: false });
-        AppState.setState({ isUnderline: false });
-        AppState.setState({ bgOpacity: 100 });
-        AppState.setState({ extractedBgColor: '#FFFFFF' }); // [Fix-1] 배경색 캐시 초기화
+        state.textAlign = 'left';
+        state.isBold = false;
+        state.isItalic = false;
+        state.isUnderline = false;
+        state.bgOpacity = 100;
+        state.extractedBgColor = '#FFFFFF'; // [Fix-1] 배경색 캐시 초기화
+        updateToolbarUI();
 
         // overlayCanvas 드래그 비활성화
         elements.overlayCanvas.style.pointerEvents = 'none';
         elements.overlayCanvas.style.cursor = 'default';
+
+        // 캔버스 클리어 및 재렌더링
+        renderPreviewOverlay();
     }
 
     function toggleStyle(style) {
-        if (style === 'bold') AppState.setState({ isBold: !AppState.get('isBold') });
-        if (style === 'italic') AppState.setState({ isItalic: !AppState.get('isItalic') });
-        if (style === 'underline') AppState.setState({ isUnderline: !AppState.get('isUnderline') });
+        if (style === 'bold') state.isBold = !state.isBold;
+        if (style === 'italic') state.isItalic = !state.isItalic;
+        if (style === 'underline') state.isUnderline = !state.isUnderline;
+        updateToolbarUI();
+        updateLivePreview();
     }
 
     function setAlignment(align) {
-        AppState.setState({ textAlign: align });
+        state.textAlign = align;
+        updateToolbarUI();
+        updateLivePreview();
     }
 
     function handleOpacityChange(e) {
-        AppState.setState({ bgOpacity: parseInt(e.target.value) });
-    }
-
-    // ========================================
-    // 스포이드 (EyeDropper API)
-    // ========================================
-    async function handleEyeDropper(mode) {
-        try {
-            const eyeDropper = new EyeDropper();
-            const result = await eyeDropper.open();
-            const color = result.sRGBHex; // '#rrggbb' 형식
-
-            if (mode === 'font') {
-                // 글자색 적용
-                elements.fontColor.value = color;
-                if (elements.fontColorHex) elements.fontColorHex.value = color;
-            } else if (mode === 'bg') {
-                // 배경색 적용
-                if (elements.bgColor) elements.bgColor.value = color;
-                if (elements.bgColorHex) elements.bgColorHex.value = color;
-                AppState.setState({ extractedBgColor: color });
-            }
-
-            // 라이브 프리뷰 갱신 (syncUI가 구독 중이므로 상태 변경만으로 충분)
-            // font 모드는 AppState에 별도 색상 상태가 없어 수동 갱신 필요
-            updateLivePreview();
-
-            console.log(`[스포이드] ${mode === 'font' ? '글자색' : '배경색'} → ${color}`);
-        } catch (err) {
-            // 사용자가 ESC로 취소한 경우
-            if (err.name !== 'AbortError') {
-                console.error('[스포이드] 오류:', err);
-            }
-        }
+        state.bgOpacity = parseInt(e.target.value);
+        elements.bgOpacityValue.textContent = state.bgOpacity + '%';
+        updateLivePreview();
     }
 
     function updateToolbarUI() {
-        elements.btnBold.classList.toggle('active', AppState.get('isBold'));
-        elements.btnItalic.classList.toggle('active', AppState.get('isItalic'));
-        elements.btnUnderline.classList.toggle('active', AppState.get('isUnderline'));
-        elements.btnAlignLeft.classList.toggle('active', AppState.get('textAlign') === 'left');
-        elements.btnAlignCenter.classList.toggle('active', AppState.get('textAlign') === 'center');
-        elements.btnAlignRight.classList.toggle('active', AppState.get('textAlign') === 'right');
-        elements.bgOpacity.value = AppState.get('bgOpacity');
-        elements.bgOpacityValue.textContent = AppState.get('bgOpacity') + '%';
+        elements.btnBold.classList.toggle('active', state.isBold);
+        elements.btnItalic.classList.toggle('active', state.isItalic);
+        elements.btnUnderline.classList.toggle('active', state.isUnderline);
+        elements.btnAlignLeft.classList.toggle('active', state.textAlign === 'left');
+        elements.btnAlignCenter.classList.toggle('active', state.textAlign === 'center');
+        elements.btnAlignRight.classList.toggle('active', state.textAlign === 'right');
+        elements.bgOpacity.value = state.bgOpacity;
+        elements.bgOpacityValue.textContent = state.bgOpacity + '%';
     }
 
     // ========================================
@@ -906,16 +775,16 @@
     // ========================================
 
     async function performOCR() {
-        if (!AppState.get('selectionRect')) return;
+        if (!state.selectionRect) return;
 
         elements.ocrResult.innerHTML = '<span class="placeholder">인식 중... (처음 실행 시 언어 데이터 다운로드)</span>';
         if (elements.ocrConfidence) elements.ocrConfidence.hidden = true;
 
         try {
-            console.log('OCR 시작, 영역:', AppState.get('selectionRect'));
+            console.log('OCR 시작, 영역:', state.selectionRect);
             const result = await OCRHandler.recognizeCanvasArea(
                 elements.pdfCanvas,
-                AppState.get('selectionRect')
+                state.selectionRect
             );
             console.log('OCR 결과:', result);
 
@@ -949,7 +818,7 @@
                 // [Fix-B] 폰트 크기: 이진 탐색으로 영역에 꼭 맞는 최대 크기 실측 계산
                 const text = result.text;
                 const scale = PDFHandler.getScale();
-                const rect = AppState.get('selectionRect');
+                const rect = state.selectionRect;
                 const pdfWidth = rect.width / scale;   // PDF 좌표계 너비
                 const pdfHeight = rect.height / scale; // PDF 좌표계 높이
                 const padding = 8;                     // 상하좌우 패딩 합계
@@ -961,8 +830,8 @@
                 // 현재 선택된 폰트 정보
                 const fontValue = elements.fontSelect.value;
                 const [fontFamily] = fontValue.includes('|') ? fontValue.split('|') : [fontValue, '400'];
-                const isBold = AppState.get('isBold');
-                const isItalic = AppState.get('isItalic');
+                const isBold = state.isBold;
+                const isItalic = state.isItalic;
                 const fontWeight = isBold ? 'bold' : '400';
                 const fontStyleStr = isItalic ? 'italic ' : '';
 
@@ -1007,8 +876,8 @@
         try {
             const scale = PDFHandler.getScale();
             const fontInfo = await PDFHandler.getTextInfoInRect(
-                AppState.get('currentPage'),
-                AppState.get('selectionRect'),
+                state.currentPage,
+                state.selectionRect,
                 scale
             );
 
@@ -1045,22 +914,22 @@
                     elements.fontSize.value = suggestedSize;
                 }
 
-                // Bold 버튼 상태 설정 [Fix-3: AppState.get('richTextStyles') → AppState.get('isBold')]
+                // Bold 버튼 상태 설정 [Fix-3: state.richTextStyles → state.isBold]
                 if (fontInfo.isBold) {
                     elements.btnBold.classList.add('active');
-                    AppState.setState({ isBold: true });
+                    state.isBold = true;
                 } else {
                     elements.btnBold.classList.remove('active');
-                    AppState.setState({ isBold: false });
+                    state.isBold = false;
                 }
 
-                // Italic 버튼 상태 설정 [Fix-3: AppState.get('richTextStyles') → AppState.get('isItalic')]
+                // Italic 버튼 상태 설정 [Fix-3: state.richTextStyles → state.isItalic]
                 if (fontInfo.isItalic) {
                     elements.btnItalic.classList.add('active');
-                    AppState.setState({ isItalic: true });
+                    state.isItalic = true;
                 } else {
                     elements.btnItalic.classList.remove('active');
-                    AppState.setState({ isItalic: false });
+                    state.isItalic = false;
                 }
 
                 console.log('PDF 폰트 자동 적용:', fontValue, 'Bold:', fontInfo.isBold, 'Italic:', fontInfo.isItalic);
@@ -1072,8 +941,8 @@
                     // [Fix-3] Canvas 픽셀밀도로 Bold 추정
                     const boldEstimated = TextOverlay.estimateIsBold(
                         elements.pdfCanvas,
-                        AppState.get('selectionRect'),
-                        AppState.get('extractedBgColor') || '#FFFFFF'
+                        state.selectionRect,
+                        state.extractedBgColor || '#FFFFFF'
                     );
                     if (boldEstimated) {
                         elements.fontSelect.value = hasKorean ? 'Malgun Gothic|400' : 'Noto Sans KR|400';
@@ -1082,11 +951,11 @@
                         const boldOpt = opts.find(o => o.value === (hasKorean ? 'Pretendard|700' : 'Noto Sans KR|400'));
                         if (boldOpt) elements.fontSelect.value = boldOpt.value;
                         elements.btnBold.classList.add('active');
-                        AppState.setState({ isBold: true });
+                        state.isBold = true;
                     } else {
                         elements.fontSelect.value = hasKorean ? 'Pretendard|400' : 'Noto Sans KR|400';
                         elements.btnBold.classList.remove('active');
-                        AppState.setState({ isBold: false });
+                        state.isBold = false;
                     }
                     console.log('[폰트 fallback] Bold 픽셀밀도 추정:', boldEstimated);
                 }
@@ -1139,12 +1008,12 @@
         }
 
         // 선택 즉시 미리보기 반영
-        if (AppState.get('previewOverlay')) {
-            AppState.get('previewOverlay').fontFamily = family;
-            AppState.get('previewOverlay').fontWeight = weight;
-            AppState.get('previewOverlay').font = family;
+        if (state.previewOverlay) {
+            state.previewOverlay.fontFamily = family;
+            state.previewOverlay.fontWeight = weight;
+            state.previewOverlay.font = family;
             updateLivePreview();
-        } else if (AppState.get('selectionRect')) {
+        } else if (state.selectionRect) {
             // 미리보기 전에 폰트를 변경한 경우: 자동으로 미리보기 생성
             handlePreview();
         }
@@ -1155,23 +1024,23 @@
     // ========================================
 
     function handlePreview() {
-        if (!AppState.get('selectionRect')) return;
+        if (!state.selectionRect) return;
 
         const scale = PDFHandler.getScale();
 
         // [Fix-1] 이미 추출된 배경색 캐시 사용 (없으면 재추출)
-        const backgroundColor = AppState.get('extractedBgColor') && AppState.get('extractedBgColor') !== '#FFFFFF'
-            ? AppState.get('extractedBgColor')
-            : TextOverlay.extractBackgroundColor(elements.pdfCanvas, AppState.get('selectionRect'), scale);
+        const backgroundColor = state.extractedBgColor && state.extractedBgColor !== '#FFFFFF'
+            ? state.extractedBgColor
+            : TextOverlay.extractBackgroundColor(elements.pdfCanvas, state.selectionRect, scale);
 
         const value = elements.fontSelect.value;
         const [family, weight] = value.includes('|') ? value.split('|') : [value, '400'];
 
         const overlay = {
-            x: AppState.get('selectionRect').x / scale,
-            y: AppState.get('selectionRect').y / scale,
-            width: AppState.get('selectionRect').width / scale,
-            height: AppState.get('selectionRect').height / scale,
+            x: state.selectionRect.x / scale,
+            y: state.selectionRect.y / scale,
+            width: state.selectionRect.width / scale,
+            height: state.selectionRect.height / scale,
             text: elements.textInput.value,
             font: family,          // 호환성
             fontFamily: family,    // 신규
@@ -1179,15 +1048,15 @@
             size: parseInt(elements.fontSize.value) || 24, // [Fix] NaN 방어
             color: elements.fontColor.value,
             backgroundColor: backgroundColor,
-            textAlign: AppState.get('textAlign'),
-            isBold: AppState.get('isBold'),
-            isItalic: AppState.get('isItalic'),
-            isUnderline: AppState.get('isUnderline'),
-            bgOpacity: AppState.get('bgOpacity')
+            textAlign: state.textAlign,
+            isBold: state.isBold,
+            isItalic: state.isItalic,
+            isUnderline: state.isUnderline,
+            bgOpacity: state.bgOpacity
         };
 
         // 미리보기 상태 저장 (드래그 가능하도록)
-        AppState.setState({ previewOverlay: overlay });
+        state.previewOverlay = overlay;
 
         // overlayCanvas를 클릭 가능하도록 설정
         elements.overlayCanvas.style.pointerEvents = 'auto';
@@ -1205,39 +1074,39 @@
         ctx.clearRect(0, 0, elements.overlayCanvas.width, elements.overlayCanvas.height);
 
         // 기존 오버레이 렌더링
-        TextOverlay.renderPageOverlays(elements.overlayCanvas, AppState.get('currentPage'), scale);
+        TextOverlay.renderPageOverlays(elements.overlayCanvas, state.currentPage, scale);
 
         // 미리보기 렌더링
-        if (AppState.get('previewOverlay')) {
-            TextOverlay.renderPreview(elements.overlayCanvas, AppState.get('previewOverlay'), scale);
+        if (state.previewOverlay) {
+            TextOverlay.renderPreview(elements.overlayCanvas, state.previewOverlay, scale);
         }
     }
 
     function updateLivePreview() {
         // [Fix] previewOverlay가 없고 selectionRect가 있으면 미리보기 자동 생성
-        if (!AppState.get('previewOverlay')) {
-            if (AppState.get('selectionRect')) handlePreview();
+        if (!state.previewOverlay) {
+            if (state.selectionRect) handlePreview();
             return;
         }
 
         // 현재 입력 값으로 오버레이 업데이트
-        AppState.get('previewOverlay').text = elements.textInput.value;
+        state.previewOverlay.text = elements.textInput.value;
 
         const value = elements.fontSelect.value;
         const [family, weight] = value.includes('|') ? value.split('|') : [value, '400'];
 
-        AppState.get('previewOverlay').font = family;
-        AppState.get('previewOverlay').fontFamily = family;
-        AppState.get('previewOverlay').fontWeight = weight;
+        state.previewOverlay.font = family;
+        state.previewOverlay.fontFamily = family;
+        state.previewOverlay.fontWeight = weight;
 
-        AppState.get('previewOverlay').size = parseInt(elements.fontSize.value) || 24;
-        AppState.get('previewOverlay').color = elements.fontColor.value;
-        AppState.get('previewOverlay').textAlign = AppState.get('textAlign');
-        AppState.get('previewOverlay').isBold = AppState.get('isBold');
-        AppState.get('previewOverlay').isItalic = AppState.get('isItalic');
-        AppState.get('previewOverlay').isUnderline = AppState.get('isUnderline');
-        AppState.get('previewOverlay').bgOpacity = AppState.get('bgOpacity');
-        AppState.get('previewOverlay').backgroundColor = AppState.get('extractedBgColor') || AppState.get('previewOverlay').backgroundColor;
+        state.previewOverlay.size = parseInt(elements.fontSize.value) || 24;
+        state.previewOverlay.color = elements.fontColor.value;
+        state.previewOverlay.textAlign = state.textAlign;
+        state.previewOverlay.isBold = state.isBold;
+        state.previewOverlay.isItalic = state.isItalic;
+        state.previewOverlay.isUnderline = state.isUnderline;
+        state.previewOverlay.bgOpacity = state.bgOpacity;
+        state.previewOverlay.backgroundColor = state.extractedBgColor || state.previewOverlay.backgroundColor;
 
         renderPreviewOverlay();
     }
@@ -1247,52 +1116,48 @@
     // ========================================
 
     function handleOverlayDragStart(e) {
-        if (!AppState.get('previewOverlay')) return;
+        if (!state.previewOverlay) return;
 
         const scale = PDFHandler.getScale();
-        const mousePos = Utils.getMousePosOnCanvas(elements.overlayCanvas, e);
-        const mouseX = mousePos.x;
-        const mouseY = mousePos.y;
+        const canvasRect = elements.overlayCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - canvasRect.left;
+        const mouseY = e.clientY - canvasRect.top;
 
         // 리사이즈 핸들 체크
-        const handle = TextOverlay.getResizeHandle(AppState.get('previewOverlay'), mouseX, mouseY, scale);
+        const handle = TextOverlay.getResizeHandle(state.previewOverlay, mouseX, mouseY, scale);
 
         if (handle) {
             // 리사이즈 모드
-            AppState.setState({ isResizingOverlay: true });
-            AppState.setState({ resizeHandle: handle });
-            AppState.setState({
-                dragStart: {
-                    x: mouseX,
-                    y: mouseY,
-                    overlayX: AppState.get('previewOverlay').x,
-                    overlayY: AppState.get('previewOverlay').y,
-                    overlayWidth: AppState.get('previewOverlay').width,
-                    overlayHeight: AppState.get('previewOverlay').height
-                }
-            });
+            state.isResizingOverlay = true;
+            state.resizeHandle = handle;
+            state.dragStart = {
+                x: mouseX,
+                y: mouseY,
+                overlayX: state.previewOverlay.x,
+                overlayY: state.previewOverlay.y,
+                overlayWidth: state.previewOverlay.width,
+                overlayHeight: state.previewOverlay.height
+            };
             e.preventDefault();
             e.stopPropagation();
             return;
         }
 
         // 오버레이 영역 내부인지 확인 (드래그 모드)
-        const ox = AppState.get('previewOverlay').x * scale;
-        const oy = AppState.get('previewOverlay').y * scale;
-        const ow = AppState.get('previewOverlay').width * scale;
-        const oh = AppState.get('previewOverlay').height * scale;
+        const ox = state.previewOverlay.x * scale;
+        const oy = state.previewOverlay.y * scale;
+        const ow = state.previewOverlay.width * scale;
+        const oh = state.previewOverlay.height * scale;
 
         if (mouseX >= ox && mouseX <= ox + ow &&
             mouseY >= oy && mouseY <= oy + oh) {
-            AppState.setState({ isDraggingOverlay: true });
-            AppState.setState({
-                dragStart: {
-                    x: mouseX,
-                    y: mouseY,
-                    overlayX: AppState.get('previewOverlay').x,
-                    overlayY: AppState.get('previewOverlay').y
-                }
-            });
+            state.isDraggingOverlay = true;
+            state.dragStart = {
+                x: mouseX,
+                y: mouseY,
+                overlayX: state.previewOverlay.x,
+                overlayY: state.previewOverlay.y
+            };
             e.preventDefault();
             e.stopPropagation();
         }
@@ -1300,51 +1165,51 @@
 
     function handleOverlayDragMove(e) {
         const scale = PDFHandler.getScale();
-        const mousePos = Utils.getMousePosOnCanvas(elements.overlayCanvas, e);
-        const mouseX = mousePos.x;
-        const mouseY = mousePos.y;
+        const canvasRect = elements.overlayCanvas.getBoundingClientRect();
+        const mouseX = e.clientX - canvasRect.left;
+        const mouseY = e.clientY - canvasRect.top;
 
         // 리사이즈 중
-        if (AppState.get('isResizingOverlay') && AppState.get('previewOverlay')) {
-            const deltaX = (mouseX - AppState.get('dragStart').x) / scale;
-            const deltaY = (mouseY - AppState.get('dragStart').y) / scale;
+        if (state.isResizingOverlay && state.previewOverlay) {
+            const deltaX = (mouseX - state.dragStart.x) / scale;
+            const deltaY = (mouseY - state.dragStart.y) / scale;
 
             // 핸들에 따라 크기/위치 조정
-            const handle = AppState.get('resizeHandle');
-            let newX = AppState.get('dragStart').overlayX;
-            let newY = AppState.get('dragStart').overlayY;
-            let newW = AppState.get('dragStart').overlayWidth;
-            let newH = AppState.get('dragStart').overlayHeight;
+            const handle = state.resizeHandle;
+            let newX = state.dragStart.overlayX;
+            let newY = state.dragStart.overlayY;
+            let newW = state.dragStart.overlayWidth;
+            let newH = state.dragStart.overlayHeight;
 
             // 수평 리사이즈
             if (handle.includes('w')) {
-                newX = AppState.get('dragStart').overlayX + deltaX;
-                newW = AppState.get('dragStart').overlayWidth - deltaX;
+                newX = state.dragStart.overlayX + deltaX;
+                newW = state.dragStart.overlayWidth - deltaX;
             } else if (handle.includes('e')) {
-                newW = AppState.get('dragStart').overlayWidth + deltaX;
+                newW = state.dragStart.overlayWidth + deltaX;
             }
 
             // 수직 리사이즈
             if (handle.includes('n')) {
-                newY = AppState.get('dragStart').overlayY + deltaY;
-                newH = AppState.get('dragStart').overlayHeight - deltaY;
+                newY = state.dragStart.overlayY + deltaY;
+                newH = state.dragStart.overlayHeight - deltaY;
             } else if (handle.includes('s')) {
-                newH = AppState.get('dragStart').overlayHeight + deltaY;
+                newH = state.dragStart.overlayHeight + deltaY;
             }
 
             // 최소 크기 제한
             const minSize = 20;
             if (newW >= minSize && newH >= minSize) {
-                AppState.get('previewOverlay').x = newX;
-                AppState.get('previewOverlay').y = newY;
-                AppState.get('previewOverlay').width = newW;
-                AppState.get('previewOverlay').height = newH;
+                state.previewOverlay.x = newX;
+                state.previewOverlay.y = newY;
+                state.previewOverlay.width = newW;
+                state.previewOverlay.height = newH;
 
                 // selectionRect도 업데이트
-                AppState.get('selectionRect').x = newX * scale;
-                AppState.get('selectionRect').y = newY * scale;
-                AppState.get('selectionRect').width = newW * scale;
-                AppState.get('selectionRect').height = newH * scale;
+                state.selectionRect.x = newX * scale;
+                state.selectionRect.y = newY * scale;
+                state.selectionRect.width = newW * scale;
+                state.selectionRect.height = newH * scale;
             }
 
             renderPreviewOverlay();
@@ -1354,18 +1219,18 @@
         }
 
         // 드래그 중
-        if (AppState.get('isDraggingOverlay') && AppState.get('previewOverlay')) {
+        if (state.isDraggingOverlay && state.previewOverlay) {
             // 이동량 계산
-            const deltaX = (mouseX - AppState.get('dragStart').x) / scale;
-            const deltaY = (mouseY - AppState.get('dragStart').y) / scale;
+            const deltaX = (mouseX - state.dragStart.x) / scale;
+            const deltaY = (mouseY - state.dragStart.y) / scale;
 
             // 새 위치 계산
-            AppState.get('previewOverlay').x = AppState.get('dragStart').overlayX + deltaX;
-            AppState.get('previewOverlay').y = AppState.get('dragStart').overlayY + deltaY;
+            state.previewOverlay.x = state.dragStart.overlayX + deltaX;
+            state.previewOverlay.y = state.dragStart.overlayY + deltaY;
 
             // selectionRect도 업데이트 (apply에서 사용)
-            AppState.get('selectionRect').x = AppState.get('previewOverlay').x * scale;
-            AppState.get('selectionRect').y = AppState.get('previewOverlay').y * scale;
+            state.selectionRect.x = state.previewOverlay.x * scale;
+            state.selectionRect.y = state.previewOverlay.y * scale;
 
             // 재렌더링
             renderPreviewOverlay();
@@ -1376,16 +1241,16 @@
         }
 
         // 커서 변경 (호버 시)
-        if (AppState.get('previewOverlay')) {
-            const handle = TextOverlay.getResizeHandle(AppState.get('previewOverlay'), mouseX, mouseY, scale);
+        if (state.previewOverlay) {
+            const handle = TextOverlay.getResizeHandle(state.previewOverlay, mouseX, mouseY, scale);
             if (handle) {
                 elements.overlayCanvas.style.cursor = TextOverlay.getResizeCursor(handle);
             } else {
                 // 오버레이 영역 내부인지 확인
-                const ox = AppState.get('previewOverlay').x * scale;
-                const oy = AppState.get('previewOverlay').y * scale;
-                const ow = AppState.get('previewOverlay').width * scale;
-                const oh = AppState.get('previewOverlay').height * scale;
+                const ox = state.previewOverlay.x * scale;
+                const oy = state.previewOverlay.y * scale;
+                const ow = state.previewOverlay.width * scale;
+                const oh = state.previewOverlay.height * scale;
 
                 if (mouseX >= ox && mouseX <= ox + ow &&
                     mouseY >= oy && mouseY <= oy + oh) {
@@ -1398,17 +1263,17 @@
     }
 
     function handleOverlayDragEnd(e) {
-        if (AppState.get('isDraggingOverlay') || AppState.get('isResizingOverlay')) {
-            AppState.setState({ isDraggingOverlay: false });
-            AppState.setState({ isResizingOverlay: false });
-            AppState.setState({ resizeHandle: null });
-            AppState.setState({ dragStart: null });
+        if (state.isDraggingOverlay || state.isResizingOverlay) {
+            state.isDraggingOverlay = false;
+            state.isResizingOverlay = false;
+            state.resizeHandle = null;
+            state.dragStart = null;
         }
     }
 
     function handleCanvasWheel(e) {
         // 편집 상태(미리보기 오버레이가 있을 때)에서만 작동
-        if (!AppState.get('previewOverlay')) return;
+        if (!state.previewOverlay) return;
 
         // 브라우저 기본 스크롤 방지
         e.preventDefault();
@@ -1431,12 +1296,12 @@
     }
 
     async function handleApplyAll() {
-        if (!AppState.get('selectionRect') && !AppState.get('previewOverlay')) {
+        if (!state.selectionRect && !state.previewOverlay) {
             showToast('워터마크 영역을 먼저 드래그하여 선택해 주세요.', 'info');
             return;
         }
 
-        if (!confirm(`모든 페이지(${AppState.get('totalPages')}장)의 해당 위치를 배경색으로 덮어씁니다. 진행하시겠습니까?`)) {
+        if (!confirm(`모든 페이지(${state.totalPages}장)의 해당 위치를 배경색으로 덮어씁니다. 진행하시겠습니까?`)) {
             return;
         }
 
@@ -1444,12 +1309,12 @@
 
         try {
             const scale = PDFHandler.getScale();
-            const rect = AppState.get('previewOverlay') ? {
-                x: AppState.get('previewOverlay').x * scale,
-                y: AppState.get('previewOverlay').y * scale,
-                width: AppState.get('previewOverlay').width * scale,
-                height: AppState.get('previewOverlay').height * scale
-            } : AppState.get('selectionRect');
+            const rect = state.previewOverlay ? {
+                x: state.previewOverlay.x * scale,
+                y: state.previewOverlay.y * scale,
+                width: state.previewOverlay.width * scale,
+                height: state.previewOverlay.height * scale
+            } : state.selectionRect;
 
             const baseOptions = {
                 text: '', // 워터마크 제거이므로 텍스트 비움
@@ -1460,7 +1325,7 @@
             };
 
             // 모든 페이지 순회
-            for (let p = 1; p <= AppState.get('totalPages'); p++) {
+            for (let p = 1; p <= state.totalPages; p++) {
                 // 각 페이지의 해당 위치 배경색 추출
                 const bgColor = await PDFHandler.getBackgroundColorAt(p, rect, scale);
 
@@ -1477,8 +1342,8 @@
                 TextOverlay.create(p, overlayData.rect, overlayData.options);
 
                 // 진행도 표시
-                if (p % 5 === 0 || p === AppState.get('totalPages')) {
-                    showLoading(`처리 중... (${p}/${AppState.get('totalPages')})`);
+                if (p % 5 === 0 || p === state.totalPages) {
+                    showLoading(`처리 중... (${p}/${state.totalPages})`);
                 }
             }
 
@@ -1488,7 +1353,7 @@
             // 현재 페이지 재렌더링
             const ctx = elements.overlayCanvas.getContext('2d');
             ctx.clearRect(0, 0, elements.overlayCanvas.width, elements.overlayCanvas.height);
-            TextOverlay.renderPageOverlays(elements.overlayCanvas, AppState.get('currentPage'), scale);
+            TextOverlay.renderPageOverlays(elements.overlayCanvas, state.currentPage, scale);
 
             showToast('모든 페이지에 적용되었습니다.', 'success');
         } catch (error) {
@@ -1502,7 +1367,7 @@
     }
 
     function handleApply() {
-        if (!AppState.get('selectionRect') && !AppState.get('previewOverlay')) return;
+        if (!state.selectionRect && !state.previewOverlay) return;
 
         try {
             const scale = PDFHandler.getScale();
@@ -1510,41 +1375,41 @@
             let overlayData;
 
             // 미리보기 오버레이가 있으면 그 데이터 사용 (드래그로 이동된 위치 반영)
-            if (AppState.get('previewOverlay')) {
+            if (state.previewOverlay) {
                 overlayData = {
                     rect: {
-                        x: AppState.get('previewOverlay').x,
-                        y: AppState.get('previewOverlay').y,
-                        width: AppState.get('previewOverlay').width,
-                        height: AppState.get('previewOverlay').height
+                        x: state.previewOverlay.x,
+                        y: state.previewOverlay.y,
+                        width: state.previewOverlay.width,
+                        height: state.previewOverlay.height
                     },
                     options: {
                         text: elements.textInput.value,
-                        font: AppState.get('previewOverlay').fontFamily || AppState.get('previewOverlay').font,
-                        fontFamily: AppState.get('previewOverlay').fontFamily || AppState.get('previewOverlay').font,
-                        fontWeight: AppState.get('previewOverlay').fontWeight || '400',
+                        font: state.previewOverlay.fontFamily || state.previewOverlay.font,
+                        fontFamily: state.previewOverlay.fontFamily || state.previewOverlay.font,
+                        fontWeight: state.previewOverlay.fontWeight || '400',
                         size: parseInt(elements.fontSize.value),
                         color: elements.fontColor.value,
-                        backgroundColor: AppState.get('previewOverlay').backgroundColor,
-                        textAlign: AppState.get('textAlign'),
-                        isBold: AppState.get('isBold'),
-                        isItalic: AppState.get('isItalic'),
-                        bgOpacity: AppState.get('bgOpacity')
+                        backgroundColor: state.previewOverlay.backgroundColor,
+                        textAlign: state.textAlign,
+                        isBold: state.isBold,
+                        isItalic: state.isItalic,
+                        bgOpacity: state.bgOpacity
                     }
                 };
             } else {
                 // 미리보기 없이 바로 적용하는 경우
                 const backgroundColor = TextOverlay.extractBackgroundColor(
                     elements.pdfCanvas,
-                    AppState.get('selectionRect'),
+                    state.selectionRect,
                     scale
                 );
                 overlayData = {
                     rect: {
-                        x: AppState.get('selectionRect').x / scale,
-                        y: AppState.get('selectionRect').y / scale,
-                        width: AppState.get('selectionRect').width / scale,
-                        height: AppState.get('selectionRect').height / scale
+                        x: state.selectionRect.x / scale,
+                        y: state.selectionRect.y / scale,
+                        width: state.selectionRect.width / scale,
+                        height: state.selectionRect.height / scale
                     },
                     options: {
                         text: elements.textInput.value,
@@ -1554,15 +1419,15 @@
                         size: parseInt(elements.fontSize.value),
                         color: elements.fontColor.value,
                         backgroundColor: backgroundColor,
-                        textAlign: AppState.get('textAlign'),
-                        isBold: AppState.get('isBold'),
-                        isItalic: AppState.get('isItalic'),
-                        bgOpacity: AppState.get('bgOpacity')
+                        textAlign: state.textAlign,
+                        isBold: state.isBold,
+                        isItalic: state.isItalic,
+                        bgOpacity: state.bgOpacity
                     }
                 };
             }
 
-            const overlay = TextOverlay.create(AppState.get('currentPage'), overlayData.rect, overlayData.options);
+            const overlay = TextOverlay.create(state.currentPage, overlayData.rect, overlayData.options);
 
             // 오버레이 목록 업데이트
             updateOverlayList();
@@ -1570,7 +1435,7 @@
             // 캔버스 재렌더링
             const ctx = elements.overlayCanvas.getContext('2d');
             ctx.clearRect(0, 0, elements.overlayCanvas.width, elements.overlayCanvas.height);
-            TextOverlay.renderPageOverlays(elements.overlayCanvas, AppState.get('currentPage'), scale);
+            TextOverlay.renderPageOverlays(elements.overlayCanvas, state.currentPage, scale);
 
             setStep(4); // 스텝: 저장 완료
             showToast('텍스트 오버레이가 적용되었습니다.', 'success');
@@ -1639,7 +1504,7 @@
         // 캔버스 재렌더링
         const ctx = elements.overlayCanvas.getContext('2d');
         ctx.clearRect(0, 0, elements.overlayCanvas.width, elements.overlayCanvas.height);
-        TextOverlay.renderPageOverlays(elements.overlayCanvas, AppState.get('currentPage'), PDFHandler.getScale());
+        TextOverlay.renderPageOverlays(elements.overlayCanvas, state.currentPage, PDFHandler.getScale());
     }
 
     function editOverlay(id) {
@@ -1651,7 +1516,7 @@
 
         // 2. 선택 영역 및 페이지 복원
         // 만약 다른 페이지라면 페이지 이동 필요
-        if (AppState.get('currentPage') !== overlay.pageNum) {
+        if (state.currentPage !== overlay.pageNum) {
             goToPage(overlay.pageNum).then(() => {
                 // 페이지 이동 후 실행 (비동기 고려 필요하지만 간단히 처리)
                 setupEditMode(overlay);
@@ -1665,20 +1530,18 @@
         const scale = PDFHandler.getScale();
 
         // 선택 영역 설정
-        AppState.setState({
-            selectionRect: {
-                x: overlay.x * scale,
-                y: overlay.y * scale,
-                width: overlay.width * scale,
-                height: overlay.height * scale
-            }
-        });
+        state.selectionRect = {
+            x: overlay.x * scale,
+            y: overlay.y * scale,
+            width: overlay.width * scale,
+            height: overlay.height * scale
+        };
 
         // UI에 선택 박스 표시
-        elements.selectionBox.style.left = AppState.get('selectionRect').x + 'px';
-        elements.selectionBox.style.top = AppState.get('selectionRect').y + 'px';
-        elements.selectionBox.style.width = AppState.get('selectionRect').width + 'px';
-        elements.selectionBox.style.height = AppState.get('selectionRect').height + 'px';
+        elements.selectionBox.style.left = state.selectionRect.x + 'px';
+        elements.selectionBox.style.top = state.selectionRect.y + 'px';
+        elements.selectionBox.style.width = state.selectionRect.width + 'px';
+        elements.selectionBox.style.height = state.selectionRect.height + 'px';
         elements.selectionBox.hidden = false;
 
         // 폼 데이터 복원
@@ -1698,11 +1561,11 @@
         }
 
         // 리치 텍스트 상태 복원
-        AppState.setState({ textAlign: overlay.textAlign || 'left' });
-        AppState.setState({ isBold: !!overlay.isBold });
-        AppState.setState({ isItalic: !!overlay.isItalic });
-        AppState.setState({ isUnderline: !!overlay.isUnderline });
-        AppState.setState({ bgOpacity: overlay.bgOpacity !== undefined ? overlay.bgOpacity : 100 });
+        state.textAlign = overlay.textAlign || 'left';
+        state.isBold = !!overlay.isBold;
+        state.isItalic = !!overlay.isItalic;
+        state.isUnderline = !!overlay.isUnderline;
+        state.bgOpacity = overlay.bgOpacity !== undefined ? overlay.bgOpacity : 100;
         updateToolbarUI();
 
         // 에디터 UI 표시
@@ -1766,8 +1629,8 @@
 
             // 파일명 생성 (원본 파일명 + _modified)
             let fileName = 'modified_slides.pdf';
-            if (AppState.get('originalFileName')) {
-                const baseName = AppState.get('originalFileName').replace(/\.[^/.]+$/, ""); // 확장자 제거
+            if (state.originalFileName) {
+                const baseName = state.originalFileName.replace(/\.[^/.]+$/, ""); // 확장자 제거
                 fileName = `${baseName}_modified.pdf`;
             }
             a.download = fileName;
@@ -1827,13 +1690,13 @@
         elements.pageCount.textContent = '0';
 
         // 4. State 초기화
-        AppState.setState({ currentPage: 1 });
-        AppState.setState({ totalPages: 0 });
-        AppState.setState({ selectionRect: null });
-        AppState.setState({ previewOverlay: null });
-        AppState.setState({ originalFileName: null });
-        AppState.setState({ isDraggingOverlay: false });
-        AppState.setState({ isResizingOverlay: false });
+        state.currentPage = 1;
+        state.totalPages = 0;
+        state.selectionRect = null;
+        state.previewOverlay = null;
+        state.originalFileName = null;
+        state.isDraggingOverlay = false;
+        state.isResizingOverlay = false;
 
         // 5. 파일 입력 초기화
         elements.fileInput.value = '';

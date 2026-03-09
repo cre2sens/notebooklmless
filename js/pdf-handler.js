@@ -180,31 +180,42 @@ const PDFHandler = {
 
     /**
      * 특정 페이지의 특정 영역에서 배경색 추출
-     * @param {number} pageNum 
-     * @param {Object} rect - {x, y, width, height}
-     * @param {number} scale 
+     * [Perf-2] 배경색 추출 최적화: 전체 페이지 렌더링 대신 축소 스케일(miniScale)로
+     *          소형 캔버스만 생성하여 메모리·CPU 사용량을 대폭 절감
+     * @param {number} pageNum
+     * @param {Object} rect - {x, y, width, height} (원본 scale 기준 캔버스 좌표)
+     * @param {number} scale - 현재 표시 스케일
      */
     async getBackgroundColorAt(pageNum, rect, scale) {
         if (!this._pdfDoc) return '#ffffff';
 
         try {
             const page = await this._pdfDoc.getPage(pageNum);
-            const viewport = page.getViewport({ scale: scale });
 
-            // 임시 캔버스 생성 (추출용이므로 작게 만들 수도 있지만 호환성을 위해 viewport 크기로)
+            // 색상 추출 전용 저해상도 스케일 (0.15 ≈ 전체 스케일의 1/10 면적)
+            const miniScale = 0.15;
+            const scaleRatio = miniScale / scale; // 원본→미니 변환 비율
+
+            const viewport = page.getViewport({ scale: miniScale });
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = viewport.width;
-            tempCanvas.height = viewport.height;
+            tempCanvas.width = Math.ceil(viewport.width);
+            tempCanvas.height = Math.ceil(viewport.height);
             const tempCtx = tempCanvas.getContext('2d');
 
-            // 해당 페이지 렌더링
             await page.render({
                 canvasContext: tempCtx,
                 viewport: viewport
             }).promise;
 
-            // 색상 추출 (TextOverlay 모듈의 메서드 활용)
-            return TextOverlay.extractBackgroundColor(tempCanvas, rect, scale);
+            // rect 좌표를 miniScale 기준으로 변환
+            const miniRect = {
+                x: rect.x * scaleRatio,
+                y: rect.y * scaleRatio,
+                width: Math.max(2, rect.width * scaleRatio),
+                height: Math.max(2, rect.height * scaleRatio)
+            };
+
+            return TextOverlay.extractBackgroundColor(tempCanvas, miniRect, miniScale);
         } catch (error) {
             console.error(`페이지 ${pageNum} 배경색 추출 오류:`, error);
             return '#ffffff';
@@ -276,23 +287,56 @@ const PDFHandler = {
                 .sort((a, b) => b[1] - a[1])[0][0];
             const avgFontSize = Math.round(totalFontSize / matchingItems.length);
 
-            // 폰트 스타일 추론
+            // 폰트 스타일 추론 — 정규화 전·후 모두 검사 (PDF 임베딩 폰트 대응)
             const lowerFont = dominantFont.toLowerCase();
-            const isBold = /bold|heavy|black|semibold|demibold|extrabold|ultrabold/.test(lowerFont);
-            const isItalic = /italic|oblique/.test(lowerFont);
 
-            // 폰트 패밀리 추론
-            let fontFamily = 'Pretendard'; // 기본값
+            // 폰트명 정규화: ABCD+FontName, 구분자 제거 후 소문자
+            const normalizeFont = (name) => name
+                .replace(/^[A-Z]+\+/, '')   // ABCD+ 접두사 제거 (임베딩 폰트)
+                .replace(/[-_,\s]+/g, '')    // 구분자 제거
+                .toLowerCase();
+
+            const normFont = normalizeFont(dominantFont);
+
+            // Bold 키워드: 정규화 전·후 모두 검사
+            // 확장 패턴: BD(Bold축약), BK(Black), Hv(Heavy), Blk(Black), ExBd(ExtraBold), UlBd(UltraBold)
+            const boldPattern = /bold|heavy|black|semibold|demibold|extrabold|ultrabold|bd$|bk$|blk|hvt|hv$|exbd|ulbd/;
+            const isBold = boldPattern.test(lowerFont) || boldPattern.test(normFont);
+
+            // Italic 키워드: 정규화 전·후 모두 검사
+            const italicPattern = /italic|oblique|it$|ob$/;
+            const isItalic = italicPattern.test(lowerFont) || italicPattern.test(normFont);
+
+            // OCR 텍스트에 한글 포함 여부
+            const hasKorean = /[\uAC00-\uD7A3]/.test(
+                elements && elements.textInput ? elements.textInput.value : ''
+            );
+
+            // 확장 폰트 매핑 테이블
+            let fontFamily = 'Malgun Gothic'; // 기본값 (Windows 한글)
             let fontWeight = '400';
 
-            if (lowerFont.includes('nanum')) {
-                fontFamily = 'Nanum Gothic';
-            } else if (lowerFont.includes('malgun') || lowerFont.includes('맑은')) {
-                fontFamily = 'Malgun Gothic';
-            } else if (lowerFont.includes('noto') && lowerFont.includes('kr')) {
-                fontFamily = 'Noto Sans KR';
-            } else if (lowerFont.includes('pretendard')) {
+            if (normFont.includes('pretendard')) {
                 fontFamily = 'Pretendard';
+            } else if (normFont.includes('nanumgothic') || normFont.includes('nanumbarungothic')) {
+                fontFamily = 'Nanum Gothic';
+            } else if (normFont.includes('nanummyeongjo') || normFont.includes('batang') || normFont.includes('barung')) {
+                fontFamily = 'Nanum Gothic'; // 명조계 → Nanum Gothic으로 fallback
+            } else if (normFont.includes('malgun') || normFont.includes('malg')) {
+                fontFamily = 'Malgun Gothic';
+            } else if (normFont.includes('notosans') || normFont.includes('notokr')) {
+                fontFamily = 'Noto Sans KR';
+            } else if (normFont.includes('gothic') || normFont.includes('dotum') || normFont.includes('gulim')) {
+                fontFamily = hasKorean ? 'Malgun Gothic' : 'Noto Sans KR';
+            } else if (normFont.includes('arial') || normFont.includes('helvetica') || normFont.includes('freesans')) {
+                fontFamily = hasKorean ? 'Malgun Gothic' : 'Noto Sans KR';
+            } else if (normFont.includes('times') || normFont.includes('georgia') || normFont.includes('serif')) {
+                fontFamily = hasKorean ? 'Nanum Gothic' : 'Noto Sans KR';
+            } else if (normFont.includes('calibri') || normFont.includes('cambria') || normFont.includes('tahoma')) {
+                fontFamily = hasKorean ? 'Malgun Gothic' : 'Noto Sans KR';
+            } else {
+                // 미매핑 → 한글 여부로 분기
+                fontFamily = hasKorean ? 'Malgun Gothic' : 'Noto Sans KR';
             }
 
             // 굵기 추론
@@ -440,34 +484,11 @@ const PDFHandler = {
 
     /**
      * 텍스트 줄바꿈
+     * [Phase3] Utils.wrapText()로 위임 — 중복 코드 제거
      * @private
      */
     _wrapText(ctx, text, maxWidth) {
-        const lines = [];
-        const paragraphs = text.split('\n');
-
-        for (const paragraph of paragraphs) {
-            const words = paragraph.split('');
-            let currentLine = '';
-
-            for (const char of words) {
-                const testLine = currentLine + char;
-                const metrics = ctx.measureText(testLine);
-
-                if (metrics.width > maxWidth && currentLine) {
-                    lines.push(currentLine);
-                    currentLine = char;
-                } else {
-                    currentLine = testLine;
-                }
-            }
-
-            if (currentLine) {
-                lines.push(currentLine);
-            }
-        }
-
-        return lines;
+        return Utils.wrapText(ctx, text, maxWidth, 0);
     },
 
     /**

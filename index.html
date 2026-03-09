@@ -17,79 +17,152 @@
 </head>
 
 <body>
-  <!-- Header -->
+  <!-- ════════════════════════════════
+       Header
+  ════════════════════════════════ -->
   <header class="header">
     <div class="header-logo">
-      <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-        <polyline points="14 2 14 8 20 8"></polyline>
-        <line x1="16" y1="13" x2="8" y2="13"></line>
-        <line x1="16" y1="17" x2="8" y2="17"></line>
-        <polyline points="10 9 9 9 8 9"></polyline>
-      </svg>
-      <h1>NotebookLM 슬라이드 닥터</h1>
+      <!-- 로고 pill 아이콘 -->
+      <div class="logo-pill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+      </div>
+      <!-- 제목 + 부제목 -->
+      <div class="logo-text">
+        <h1>NotebookLM 슬라이드 닥터</h1>
+        <small>한글 폰트 교정 도구</small>
+      </div>
     </div>
+
     <div class="header-actions">
-      <button id="resetBtn" class="btn btn-secondary" style="margin-right: 8px;">
+      <!-- 단축키 도움말 버튼 -->
+      <button id="shortcutHelpBtn" class="shortcut-help-btn" title="키보드 단축키 (?)">?</button>
+
+      <!-- 초기화 버튼 -->
+      <button id="resetBtn" class="btn btn-secondary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
           </path>
         </svg>
-        초기화 / 새 파일
+        <span>새 파일</span>
       </button>
+
+      <!-- 다운로드 버튼 -->
       <button id="downloadBtn" class="btn btn-primary" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="7 10 12 15 17 10"></polyline>
           <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
-        다운로드
+        <span>다운로드</span>
       </button>
     </div>
   </header>
 
-  <!-- Main Content -->
+  <!-- ════════════════════════════════
+       Step Bar (워크플로 진행 표시)
+  ════════════════════════════════ -->
+  <nav class="step-bar" id="stepBar">
+    <div class="step-item active" id="step1" data-step="1">
+      <div class="step-num"><span>1</span></div>
+      <span class="step-label">PDF 업로드</span>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="step2" data-step="2">
+      <div class="step-num"><span>2</span></div>
+      <span class="step-label">영역 선택</span>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="step3" data-step="3">
+      <div class="step-num"><span>3</span></div>
+      <span class="step-label">텍스트 편집</span>
+    </div>
+    <div class="step-connector"></div>
+    <div class="step-item" id="step4" data-step="4">
+      <div class="step-num"><span>4</span></div>
+      <span class="step-label">저장 완료</span>
+    </div>
+  </nav>
+
+  <!-- ════════════════════════════════
+       Main Content (3-panel layout)
+  ════════════════════════════════ -->
   <main class="main-content">
-    <!-- Left Panel: Page Thumbnails -->
-    <aside class="panel panel-left">
+
+    <!-- ── 왼쪽 패널: 페이지 썸네일 ── -->
+    <aside class="panel panel-left" id="panelLeft">
       <div class="panel-header">
         <h2>페이지</h2>
-        <span id="pageCount" class="badge">0</span>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span id="pageCount" class="badge">0</span>
+          <!-- 패널 접기 버튼 -->
+          <button class="panel-collapse-btn" id="collapseLeftBtn" title="패널 숨기기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+        </div>
       </div>
       <div id="thumbnailContainer" class="thumbnail-container">
         <div class="empty-state">
-          <p>PDF를 업로드하세요</p>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <line x1="9" y1="9" x2="15" y2="9"></line>
+          </svg>
+          <p>PDF를 업로드하면<br>썸네일이 표시됩니다</p>
         </div>
       </div>
     </aside>
 
-    <!-- Center: Canvas Editor -->
+    <!-- ── 가운데 패널: 캔버스 에디터 ── -->
     <section class="panel panel-center">
-      <!-- Upload Area (shown when no PDF) -->
+
+      <!-- 업로드 영역 (PDF 없을 때) -->
       <div id="uploadArea" class="upload-area">
         <div class="upload-content">
-          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <path d="M12 18v-6"></path>
-            <path d="M9 15l3-3 3 3"></path>
-          </svg>
+          <!-- 아이콘 감싸기 -->
+          <div class="upload-icon-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <path d="M12 18v-6"></path>
+              <path d="M9 15l3-3 3 3"></path>
+            </svg>
+          </div>
           <h3>PDF 파일을 드래그하거나 클릭하여 업로드</h3>
           <p>NotebookLM에서 생성된 슬라이드 PDF를 선택하세요</p>
           <input type="file" id="fileInput" accept=".pdf" hidden>
-          <button class="btn btn-outline">파일 선택</button>
+          <button class="btn btn-outline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:15px;height:15px;">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            파일 선택
+          </button>
+          <!-- 업로드 팁 -->
+          <div class="upload-tips">
+            💡 <strong>사용 팁</strong><br>
+            ① PDF 업로드 → ② 수정할 영역 드래그 선택<br>
+            ③ 올바른 텍스트 입력 → ④ "이 페이지에 적용"
+          </div>
         </div>
       </div>
 
-      <!-- Canvas Container (shown when PDF loaded) -->
+      <!-- 캔버스 컨테이너 (PDF 로드 후) -->
       <div id="canvasContainer" class="canvas-container" hidden>
         <canvas id="pdfCanvas"></canvas>
         <canvas id="overlayCanvas"></canvas>
         <div id="selectionBox" class="selection-box" hidden></div>
       </div>
 
-      <!-- Canvas Controls (하단 컨트롤바) -->
+      <!-- 하단 컨트롤바 -->
       <div id="canvasControls" class="canvas-controls" hidden>
         <button id="fitScreenBtn" class="icon-btn" title="화면에 맞춤">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -98,7 +171,7 @@
           </svg>
         </button>
         <div class="divider"></div>
-        <button id="zoomOutBtn" class="icon-btn" title="축소">
+        <button id="zoomOutBtn" class="icon-btn" title="축소 (−)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -106,7 +179,7 @@
           </svg>
         </button>
         <input type="range" id="zoomSlider" class="zoom-slider" min="25" max="200" value="100" step="5">
-        <button id="zoomInBtn" class="icon-btn" title="확대">
+        <button id="zoomInBtn" class="icon-btn" title="확대 (+)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"></circle>
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -116,38 +189,47 @@
         </button>
         <span id="zoomLevel" class="zoom-level">100%</span>
         <div class="divider"></div>
-        <span class="hint">드래그하여 수정할 영역 선택</span>
+        <!-- 힌트 칩 -->
+        <div class="hint-chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 9l4 4 10-10"></path>
+          </svg>
+          드래그하여 수정 영역 선택
+        </div>
       </div>
     </section>
 
-    <!-- Right Panel: Text Editor -->
-    <aside class="panel panel-right">
+    <!-- ── 오른쪽 패널: 텍스트 편집기 ── -->
+    <aside class="panel panel-right" id="panelRight">
       <div class="panel-header">
         <h2>텍스트 편집</h2>
       </div>
 
+      <!-- 빈 상태 -->
       <div id="editorContent" class="editor-content">
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="9" x2="15" y2="15"></line>
-            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <path d="M15 15l-4-4L3 3m8.6 8.6L21 21M3 3l18 18"></path>
           </svg>
-          <p>수정할 영역을 선택하세요</p>
+          <p>캔버스에서 수정할 영역을<br>드래그하여 선택하세요</p>
         </div>
       </div>
 
-      <!-- Editor Form (shown when area selected) -->
+      <!-- 편집 폼 (영역 선택 후 표시) -->
       <div id="editorForm" class="editor-form" hidden>
-        <!-- OCR Result -->
+
+        <!-- OCR 인식 결과 -->
         <div class="form-group">
-          <label>OCR 인식 결과</label>
+          <div class="ocr-header">
+            <label>OCR 인식 결과</label>
+            <span id="ocrConfidence" class="ocr-confidence" hidden>95%</span>
+          </div>
           <div id="ocrResult" class="ocr-result">
             <span class="placeholder">인식 중...</span>
           </div>
         </div>
 
-        <!-- Text Input -->
+        <!-- 수정할 텍스트 입력 -->
         <div class="form-group">
           <label for="textInput">수정할 텍스트</label>
           <textarea id="textInput" rows="3" placeholder="수정할 텍스트를 입력하세요"></textarea>
@@ -155,10 +237,12 @@
 
         <!-- Office Style Ribbon Toolbar -->
         <div class="office-toolbar">
-          <!-- Font Group -->
+
+          <!-- 글꼴 그룹 -->
           <div class="toolbar-group">
             <div class="group-label">글꼴</div>
             <div class="group-content">
+              <!-- 폰트 패밀리 선택 -->
               <div class="toolbar-row">
                 <select id="fontSelect" class="font-family-select">
                   <optgroup label="Pretendard (기본)">
@@ -177,38 +261,77 @@
                   </optgroup>
                 </select>
               </div>
+
+              <!-- 폰트 크기 스피너 + B/I/U -->
               <div class="toolbar-row">
-                <input type="number" id="fontSize" value="24" min="8" max="200" class="font-size-input"
-                  title="글꼴 크기 (마우스 휠 사용 가능)">
+                <!-- 스피너 위젯 -->
+                <div class="font-size-spinner">
+                  <button type="button" id="fontSizeDecBtn" class="spinner-btn" title="글꼴 크기 감소">−</button>
+                  <input type="number" id="fontSize" value="24" min="8" max="200" class="font-size-input"
+                    title="글꼴 크기 (마우스 휠 사용 가능)">
+                  <button type="button" id="fontSizeIncBtn" class="spinner-btn" title="글꼴 크기 증가">＋</button>
+                </div>
+
                 <div class="divider"></div>
+
+                <!-- B/I/U 버튼 그룹 -->
                 <div class="btn-group">
-                  <button type="button" id="btnBold" class="toolbar-btn" title="굵게 (Ctrl+B)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-                      <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"></path>
-                    </svg>
-                  </button>
-                  <button type="button" id="btnItalic" class="toolbar-btn" title="기울임꼴 (Ctrl+I)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                      <line x1="19" y1="4" x2="10" y2="4"></line>
-                      <line x1="14" y1="20" x2="5" y2="20"></line>
-                      <line x1="15" y1="4" x2="9" y2="20"></line>
-                    </svg>
-                  </button>
-                  <button type="button" id="btnUnderline" class="toolbar-btn" title="밑줄 (Ctrl+U)">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"></path>
-                      <line x1="4" y1="21" x2="20" y2="21"></line>
+                  <button type="button" id="btnBold" class="toolbar-btn" title="굵게 (Ctrl+B)">B</button>
+                  <button type="button" id="btnItalic" class="toolbar-btn" title="기울임꼴 (Ctrl+I)"
+                    style="font-style:italic;">I</button>
+                  <button type="button" id="btnUnderline" class="toolbar-btn" title="밑줄 (Ctrl+U)"
+                    style="text-decoration:underline;">U</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- 글자색 피커 -->
+                <div class="color-picker-wrap">
+                  <input type="color" id="fontColor" value="#000000" class="color-swatch" title="글자 색">
+                  <input type="text" id="fontColorHex" value="#000000" class="color-hex-input" maxlength="7"
+                    placeholder="#000000" spellcheck="false">
+                  <button type="button" id="eyeDropperFontBtn" class="toolbar-btn eyedropper-btn" title="스포이드 (글자색)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                      <path d="M2 22l1-1h3l9-9-3-3-9 9v3l-1 1z"></path>
+                      <path d="M14.5 6.5l3-3a1.41 1.41 0 0 1 2 0l1 1a1.41 1.41 0 0 1 0 2l-3 3"></path>
                     </svg>
                   </button>
                 </div>
+
                 <div class="divider"></div>
-                <input type="color" id="fontColor" value="#000000" class="color-picker-btn" title="글자 색">
+
+                <!-- 배경색 피커 -->
+                <div class="color-picker-wrap">
+                  <input type="color" id="bgColor" value="#FFFFFF" class="color-swatch" title="배경 색"
+                    style="border: 1px solid #d1d5db;">
+                  <input type="text" id="bgColorHex" value="#FFFFFF" class="color-hex-input" maxlength="7"
+                    placeholder="#FFFFFF" spellcheck="false">
+                  <button type="button" id="eyeDropperBgBtn" class="toolbar-btn eyedropper-btn" title="스포이드 (배경색)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                      <path d="M2 22l1-1h3l9-9-3-3-9 9v3l-1 1z"></path>
+                      <path d="M14.5 6.5l3-3a1.41 1.41 0 0 1 2 0l1 1a1.41 1.41 0 0 1 0 2l-3 3"></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 컬러 프리셋 -->
+              <div class="toolbar-row">
+                <div class="color-presets" id="colorPresets">
+                  <div class="color-preset" style="background:#000000;" data-color="#000000" title="검정"></div>
+                  <div class="color-preset" style="background:#ffffff;" data-color="#ffffff" title="흰색"></div>
+                  <div class="color-preset" style="background:#374151;" data-color="#374151" title="진회색"></div>
+                  <div class="color-preset" style="background:#6366f1;" data-color="#6366f1" title="인디고"></div>
+                  <div class="color-preset" style="background:#0ea5e9;" data-color="#0ea5e9" title="스카이블루"></div>
+                  <div class="color-preset" style="background:#22c55e;" data-color="#22c55e" title="그린"></div>
+                  <div class="color-preset" style="background:#f59e0b;" data-color="#f59e0b" title="앰버"></div>
+                  <div class="color-preset" style="background:#ef4444;" data-color="#ef4444" title="레드"></div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Paragraph Group -->
+          <!-- 단락 그룹 -->
           <div class="toolbar-group">
             <div class="group-label">단락</div>
             <div class="group-content">
@@ -241,7 +364,7 @@
             </div>
           </div>
 
-          <!-- Appearance Group -->
+          <!-- 효과 그룹 -->
           <div class="toolbar-group border-none">
             <div class="group-label">효과</div>
             <div class="group-content">
@@ -256,7 +379,7 @@
           </div>
         </div>
 
-        <!-- Font Warning -->
+        <!-- 폰트 경고 -->
         <div id="fontWarning" class="font-warning" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"></circle>
@@ -267,16 +390,35 @@
           <a id="fontDownloadLink" href="#" target="_blank">다운로드</a>
         </div>
 
-        <!-- Actions -->
+        <!-- 액션 버튼 -->
         <div class="form-actions">
-          <button id="previewBtn" class="btn btn-outline btn-action" title="현재 페이지 미리보기">미리<br>보기</button>
-          <button id="applyBtn" class="btn btn-primary btn-action" title="현재 페이지에만 적용">적용</button>
-          <button id="applyAllBtn" class="btn btn-secondary btn-action"
-            title="모든 페이지의 같은 위치에 바탕색으로 덮어씁니다 (워터마크 제거)">워터<br>마크</button>
+          <!-- 메인: 이 페이지에 적용 -->
+          <button id="applyBtn" class="btn-action-apply" title="현재 페이지에 텍스트 오버레이 적용">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            이 페이지에 적용
+          </button>
+          <!-- 보조 행 -->
+          <div class="action-row">
+            <button id="previewBtn" class="btn-action-secondary" title="현재 상태 미리보기">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              미리보기
+            </button>
+            <button id="applyAllBtn" class="btn-action-watermark" title="모든 페이지에 바탕색으로 덮어씁니다 (워터마크 제거)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M3 12h18M3 18h18"></path>
+              </svg>
+              전체 워터마크 제거
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- Overlay List -->
+      <!-- 오버레이 목록 -->
       <div id="overlayList" class="overlay-list" hidden>
         <div class="panel-header">
           <h3>적용된 수정</h3>
@@ -287,21 +429,139 @@
     </aside>
   </main>
 
-  <!-- Loading Overlay -->
+  <!-- ════════════════════════════════
+       키보드 단축키 패널 (슬라이드 드로어)
+  ════════════════════════════════ -->
+  <div class="kbd-panel-backdrop" id="kbdBackdrop"></div>
+  <div class="kbd-panel" id="kbdPanel">
+    <div class="kbd-panel-header">
+      <h3>⌨️ 키보드 단축키</h3>
+      <button class="kbd-close-btn" id="kbdCloseBtn" title="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="kbd-panel-body">
+      <p class="kbd-section-title">텍스트 서식</p>
+      <div class="kbd-list">
+        <div class="kbd-item">
+          <span class="kbd-desc">굵게</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>B</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">기울임꼴</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>I</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">밑줄</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>U</kbd></div>
+        </div>
+      </div>
+
+      <p class="kbd-section-title">편집</p>
+      <div class="kbd-list">
+        <div class="kbd-item">
+          <span class="kbd-desc">실행 취소</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>Z</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">다시 실행</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>Y</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">적용</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>Enter</kbd></div>
+        </div>
+      </div>
+
+      <p class="kbd-section-title">탐색</p>
+      <div class="kbd-list">
+        <div class="kbd-item">
+          <span class="kbd-desc">이전 페이지</span>
+          <div class="kbd-keys"><kbd>←</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">다음 페이지</span>
+          <div class="kbd-keys"><kbd>→</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">단축키 패널</span>
+          <div class="kbd-keys"><kbd>?</kbd></div>
+        </div>
+      </div>
+
+      <p class="kbd-section-title">보기</p>
+      <div class="kbd-list">
+        <div class="kbd-item">
+          <span class="kbd-desc">확대</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>+</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">축소</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>−</kbd></div>
+        </div>
+        <div class="kbd-item">
+          <span class="kbd-desc">화면 맞춤</span>
+          <div class="kbd-keys"><kbd>Ctrl</kbd><kbd>0</kbd></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════
+       Loading Overlay
+  ════════════════════════════════ -->
   <div id="loadingOverlay" class="loading-overlay" hidden>
     <div class="loading-spinner"></div>
     <p id="loadingText">로딩 중...</p>
   </div>
 
+  <!-- ════════════════════════════════
+       Debug Console (Ctrl+Shift+D)
+  ════════════════════════════════ -->
+  <div id="debugPanel" class="debug-panel" hidden>
+    <div class="debug-panel-header">
+      <div class="debug-title-row">
+        <span class="debug-icon">🐛</span>
+        <h3>Debug Console</h3>
+      </div>
+      <div class="debug-header-actions">
+        <button id="debugClearBtn" class="debug-action-btn" title="로그 초기화">Clear</button>
+        <button id="debugCloseBtn" class="debug-close-btn" title="닫기 (Ctrl+Shift+D)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="debug-tabs">
+      <button class="debug-tab active" data-tab="state">상태</button>
+      <button class="debug-tab" data-tab="log">로그 <span id="debugLogCount" class="debug-log-badge">0</span></button>
+    </div>
+    <div class="debug-panel-body">
+      <pre id="debugStateView" class="debug-content active"></pre>
+      <div id="debugLogView" class="debug-content debug-log-list"></div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- External Libraries -->
+  <!-- ════════════════════════════════
+       External Libraries
+  ════════════════════════════════ -->
+  <!-- 외부 라이브러리 (CDN) — crossorigin/integrity 제거로 file:// 환경 호환성 확보 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
   <!-- App Scripts -->
+  <script src="js/utils.js"></script><!-- [Phase3] 공통 유틸리티 — 반드시 먼저 로드 -->
+  <script src="js/state-manager.js"></script>
+  <script src="js/font-matcher.js"></script>
   <script src="js/font-detector.js"></script>
   <script src="js/text-corrector.js"></script>
   <script src="js/pdf-handler.js"></script>
