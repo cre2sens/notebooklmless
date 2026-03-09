@@ -1,0 +1,28 @@
+--- Test Run ---
+Console: [초기화] PDF.js (pdfjsLib) ✅
+Console: [초기화] pdf-lib (PDFLib) ✅
+Console: [초기화] Tesseract.js ✅
+Console: NotebookLM 슬라이드 닥터 초기화 완료
+Console: handleSelectionStart called: 424 357
+Console: mousePos: {x: 4.5, y: 49.5} offset: {left: 199.5, top: 207.5}
+Console: selectionStart state: {x: 4.5, y: 49.5}
+Console: Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently
+Console: OCR 시작, 영역: {x: 4.5, y: 49.5, width: 50, height: 50}
+Console: OCR 영역: {x: 4, y: 49, width: 50, height: 50}
+Console: OCR 엔진 초기화 시작...
+Console: Tesseract 버전: unknown
+Console: OCR 상태: loading tesseract core
+Console: OCR 상태: loading tesseract core
+Console: OCR 상태: initializing tesseract
+Console: OCR 상태: initializing tesseract
+Console: OCR 상태: loading language traineddata
+Console: OCR 상태: loading language traineddata
+Console: OCR 상태: loading language traineddata
+Console: OCR 상태: loading language traineddata
+Console: OCR 상태: loading language traineddata
+Console: OCR 상태: initializing api
+Console: OCR 상태: initializing api
+Console: OCR 엔진 초기화 완료
+Console: OCR recognize 시작...
+Console: OCR recognize 완료
+Console: OCR 결과: {text: , confidence: 0, words: Array(0), lines: Array(0)}

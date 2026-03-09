@@ -2054,3 +2054,199 @@ pre.debug-content {
     padding: 8px 10px;
   }
 }
+
+/* ========================================
+   Debug Console Phase 5
+======================================== */
+.debug-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  background: var(--bg-app);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border-color);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
+  transition: transform var(--transition-normal);
+}
+
+.debug-panel[hidden] {
+  display: none;
+}
+
+.debug-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.debug-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-icon {
+  font-size: 16px;
+}
+
+.debug-panel-header h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.debug-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-action-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.debug-action-btn:hover {
+  background: var(--border-hover);
+}
+
+.debug-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.debug-close-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.debug-close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.debug-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-app);
+}
+
+.debug-tab {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all var(--transition-fast);
+}
+
+.debug-tab:hover {
+  color: var(--text-primary);
+}
+
+.debug-tab.active {
+  color: var(--indigo);
+  border-bottom-color: var(--indigo);
+  font-weight: 600;
+}
+
+.debug-log-badge {
+  background: var(--indigo);
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.debug-panel-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #0d1117;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+.debug-content {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px;
+  overflow: auto;
+  display: none;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #e6edf3;
+  margin: 0;
+}
+
+.debug-content.active {
+  display: block;
+}
+
+.debug-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.debug-log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.debug-log-time {
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.debug-log-source {
+  color: var(--teal);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.debug-log-changes {
+  color: var(--success);
+  word-break: break-all;
+}
+
+.debug-log-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px;
+  font-style: italic;
+}

@@ -144,7 +144,6 @@
     // ========================================
     function syncUI() {
         updateToolbarUI();
-        updateLivePreview();
         updateDebugPanel();
     }
 
