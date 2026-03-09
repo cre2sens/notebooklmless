@@ -48,8 +48,13 @@ const FontDetector = {
    * @returns {boolean}
    */
   isFontInstalled(fontName) {
-    // 웹폰트는 항상 사용 가능으로 처리
-    if (fontName === 'Noto Sans KR') {
+    // 웹폰트는 브라우저가 로드하므로 항상 사용 가능으로 처리
+    const webFonts = [
+      'Noto Sans KR', 'Nanum Gothic', 'Jua', 'Do Hyeon',
+      'Black Han Sans', 'Gugi', 'Gaegu', 'Oswald',
+      'Roboto', 'Pretendard'
+    ];
+    if (webFonts.includes(fontName)) {
       return true;
     }
 
@@ -57,7 +62,7 @@ const FontDetector = {
     if (document.fonts && document.fonts.check) {
       // 다양한 크기로 테스트하여 정확도 향상
       const testSizes = ['12px', '16px', '24px'];
-      
+
       for (const size of testSizes) {
         try {
           const result = document.fonts.check(`${size} "${fontName}"`);
@@ -66,14 +71,14 @@ const FontDetector = {
           console.warn(`Font check failed for ${fontName}:`, e);
         }
       }
-      
+
       // 별칭도 확인
       const alias = this.fontAliases[fontName];
       if (alias) {
         for (const size of testSizes) {
           try {
             if (document.fonts.check(`${size} "${alias}"`)) return true;
-          } catch (e) {}
+          } catch (e) { }
         }
       }
     }
@@ -90,15 +95,15 @@ const FontDetector = {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const testString = '가나다라마바사 ABCDEFG 1234567';
-    
+
     // 기본 폰트로 측정
     ctx.font = '72px monospace';
     const baseWidth = ctx.measureText(testString).width;
-    
+
     // 테스트 폰트로 측정
     ctx.font = `72px "${fontName}", monospace`;
     const testWidth = ctx.measureText(testString).width;
-    
+
     // 너비가 다르면 폰트가 적용된 것
     return baseWidth !== testWidth;
   },
@@ -109,9 +114,9 @@ const FontDetector = {
    * @returns {Object|null}
    */
   getFontDownloadInfo(fontName) {
-    return this.fontDownloadInfo[fontName] || 
-           this.fontDownloadInfo[this.fontAliases[fontName]] || 
-           null;
+    return this.fontDownloadInfo[fontName] ||
+      this.fontDownloadInfo[this.fontAliases[fontName]] ||
+      null;
   },
 
   /**
@@ -144,10 +149,21 @@ const FontDetector = {
       'Noto Sans KR',
       'Malgun Gothic',
       '맑은 고딕',
+      'Nanum Gothic',
       'NanumGothic',
       '나눔고딕',
       'Pretendard',
       'Apple SD Gothic Neo',
+      'Jua',
+      '주아',
+      'Do Hyeon',
+      '도현',
+      'Black Han Sans',
+      '검은고딕',
+      'Gugi',
+      '구기',
+      'Gaegu',
+      '개구',
       'Dotum',
       '돋움',
       'Gulim',
@@ -156,7 +172,7 @@ const FontDetector = {
       '바탕'
     ];
 
-    return koreanFonts.some(f => 
+    return koreanFonts.some(f =>
       f.toLowerCase() === fontName.toLowerCase()
     );
   }
