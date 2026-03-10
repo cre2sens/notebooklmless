@@ -25,7 +25,7 @@
        Header
   ════════════════════════════════ -->
   <header class="header">
-    <div class="header-logo">
+    <div class="header-logo" onclick="location.reload();" style="cursor: pointer;" title="새로고침 (처음으로 돌아가기)">
       <!-- 로고 pill 아이콘 -->
       <div class="logo-pill">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -44,6 +44,21 @@
     </div>
 
     <div class="header-actions">
+      <!-- 테마 전환 버튼 -->
+      <button id="themeToggleBtn" class="shortcut-help-btn" title="테마 전환 (다크/라이트)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </button>
+
       <!-- 단축키 도움말 버튼 -->
       <button id="shortcutHelpBtn" class="shortcut-help-btn" title="키보드 단축키 (?)">?</button>
 
@@ -297,9 +312,10 @@
                   <button type="button" id="btnUnderline" class="toolbar-btn" title="밑줄 (Ctrl+U)"
                     style="text-decoration:underline;">U</button>
                 </div>
+              </div>
 
-                <div class="divider"></div>
-
+              <!-- 글자색 & 배경색 피커 -->
+              <div class="toolbar-row">
                 <!-- 글자색 피커 -->
                 <div class="color-picker-wrap">
                   <input type="color" id="fontColor" value="#000000" class="color-swatch" title="글자 색">
@@ -330,17 +346,38 @@
                 </div>
               </div>
 
-              <!-- 컬러 프리셋 -->
-              <div class="toolbar-row">
-                <div class="color-presets" id="colorPresets">
-                  <div class="color-preset" style="background:#000000;" data-color="#000000" title="검정"></div>
-                  <div class="color-preset" style="background:#ffffff;" data-color="#ffffff" title="흰색"></div>
-                  <div class="color-preset" style="background:#374151;" data-color="#374151" title="진회색"></div>
-                  <div class="color-preset" style="background:#6366f1;" data-color="#6366f1" title="인디고"></div>
-                  <div class="color-preset" style="background:#0ea5e9;" data-color="#0ea5e9" title="스카이블루"></div>
-                  <div class="color-preset" style="background:#22c55e;" data-color="#22c55e" title="그린"></div>
-                  <div class="color-preset" style="background:#f59e0b;" data-color="#f59e0b" title="앰버"></div>
-                  <div class="color-preset" style="background:#ef4444;" data-color="#ef4444" title="레드"></div>
+              <!-- 색상 프리셋 묶음 -->
+              <div class="toolbar-row color-presets-row">
+                <!-- 글자색 프리셋 -->
+                <div class="color-presets-group">
+                  <span class="preset-label">글자:</span>
+                  <div class="color-presets" id="colorPresets">
+                    <div class="color-preset" style="background:#000000;" data-color="#000000" title="검정"></div>
+                    <div class="color-preset" style="background:#ffffff;" data-color="#ffffff" title="흰색"></div>
+                    <div class="color-preset" style="background:#374151;" data-color="#374151" title="진회색"></div>
+                    <div class="color-preset" style="background:#6366f1;" data-color="#6366f1" title="인디고"></div>
+                    <div class="color-preset" style="background:#0ea5e9;" data-color="#0ea5e9" title="스카이블루"></div>
+                    <div class="color-preset" style="background:#22c55e;" data-color="#22c55e" title="그린"></div>
+                    <div class="color-preset" style="background:#f59e0b;" data-color="#f59e0b" title="앰버"></div>
+                    <div class="color-preset" style="background:#ef4444;" data-color="#ef4444" title="레드"></div>
+                  </div>
+                </div>
+
+                <!-- 배경색 프리셋 -->
+                <div class="color-presets-group">
+                  <span class="preset-label">배경:</span>
+                  <div class="color-presets" id="bgColorPresets">
+                    <div class="color-preset" style="background:#ffffff; border:1px solid #d1d5db;" data-color="#FFFFFF"
+                      title="흰색"></div>
+                    <div class="color-preset" style="background:#000000;" data-color="#000000" title="검정"></div>
+                    <div class="color-preset" style="background:#F3F4F6;" data-color="#F3F4F6" title="연한 회색"></div>
+                    <div class="color-preset" style="background:#FEF3C7;" data-color="#FEF3C7" title="연한 노랑"></div>
+                    <div class="color-preset" style="background:#DBEAFE;" data-color="#DBEAFE" title="연한 파랑"></div>
+                    <div class="color-preset" style="background:#D1FAE5;" data-color="#D1FAE5" title="연한 녹색"></div>
+                    <div class="color-preset" style="background:#FCE7F3;" data-color="#FCE7F3" title="연한 분홍"></div>
+                    <div class="color-preset" style="background:transparent;" data-color="transparent" title="투명">
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

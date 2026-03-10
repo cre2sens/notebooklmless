@@ -46,6 +46,7 @@
         fontColor: document.getElementById('fontColor'),
         previewBtn: document.getElementById('previewBtn'),
         // applyBtn은 위의 elements.applyBtn(33번째 줄)과 중복 선언이었으므로 제거 [Fix-1]
+        themeToggleBtn: document.getElementById('themeToggleBtn'),
 
         // Rich Text Controls
         btnBold: document.getElementById('btnBold'),
@@ -83,6 +84,7 @@
         fontSizeIncBtn: document.getElementById('fontSizeIncBtn'),
         fontColorHex: document.getElementById('fontColorHex'),
         colorPresets: document.getElementById('colorPresets'),
+        bgColorPresets: document.getElementById('bgColorPresets'),
 
         // 배경색 편집
         bgColor: document.getElementById('bgColor'),
@@ -134,6 +136,12 @@
         }
         libCheck.forEach(l => console.log('[초기화]', l.name, l.loaded ? '✅' : '❌ 로딩 실패'));
 
+        // 테마 초기화
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme) {
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+
         bindEvents();
         AppState.subscribe(syncUI);
         console.log('NotebookLM 슬라이드 닥터 초기화 완료');
@@ -148,6 +156,16 @@
     }
 
     function bindEvents() {
+        // Theme Toggle
+        if (elements.themeToggleBtn) {
+            elements.themeToggleBtn.addEventListener('click', () => {
+                const currentTheme = document.documentElement.getAttribute('data-theme');
+                const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+            });
+        }
+
         // File Upload
         elements.uploadArea.addEventListener('click', () => elements.fileInput.click());
         elements.fileInput.addEventListener('change', handleFileSelect);
@@ -183,6 +201,7 @@
                 const c = elements.bgColor.value;
                 if (elements.bgColorHex) elements.bgColorHex.value = c;
                 AppState.setState({ extractedBgColor: c });
+                updateLivePreview();
             });
         }
         if (elements.bgColorHex) {
@@ -192,6 +211,7 @@
                 if (/^#[0-9a-fA-F]{6}$/.test(v)) {
                     elements.bgColor.value = v;
                     AppState.setState({ extractedBgColor: v });
+                    updateLivePreview();
                 }
             });
         }
@@ -215,9 +235,10 @@
                 elements.eyeDropperBgBtn.addEventListener('click', () => handleEyeDropper('bg'));
             }
         } else {
-            // EyeDropper API 미지원 브라우저에서는 버튼 숨기기
-            if (elements.eyeDropperFontBtn) elements.eyeDropperFontBtn.hidden = true;
-            if (elements.eyeDropperBgBtn) elements.eyeDropperBgBtn.hidden = true;
+            // EyeDropper API 미지원 브라우저에서는 버튼을 숨기지 않고 알림 표시
+            const alertMsg = '사용 중인 브라우저 또는 환경에서 스포이드 기능(EyeDropper API)을 지원하지 않습니다. Chrome 등 지원 브라우저를 이용해 주세요.';
+            if (elements.eyeDropperFontBtn) elements.eyeDropperFontBtn.addEventListener('click', () => alert(alertMsg));
+            if (elements.eyeDropperBgBtn) elements.eyeDropperBgBtn.addEventListener('click', () => alert(alertMsg));
         }
 
         // Actions
@@ -368,7 +389,39 @@
                 elements.fontColor.value = color;
                 if (elements.fontColorHex) elements.fontColorHex.value = color;
                 // 선택 표시
-                elements.colorPresets.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
+                preset.classList.add('selected');
+                updateLivePreview();
+            });
+        }
+
+        // ── 배경색 프리셋 ──
+        if (elements.bgColorPresets) {
+            elements.bgColorPresets.addEventListener('click', (e) => {
+                const preset = e.target.closest('.color-preset');
+                if (!preset) return;
+                const color = preset.dataset.color;
+                if (!color) return;
+
+                // 투명 예외 처리
+                if (color === 'transparent') {
+                    AppState.setState({ extractedBgColor: 'transparent', bgOpacity: 0 });
+                    if (elements.bgOpacity) elements.bgOpacity.value = 0;
+                    if (elements.bgOpacityValue) elements.bgOpacityValue.textContent = '0%';
+                } else {
+                    elements.bgColor.value = color;
+                    if (elements.bgColorHex) elements.bgColorHex.value = color;
+                    AppState.setState({ extractedBgColor: color });
+
+                    // 여태 투명 상태였다면 불투명도로 리셋
+                    if (AppState.get('bgOpacity') === 0) {
+                        AppState.setState({ bgOpacity: 100 });
+                        if (elements.bgOpacity) elements.bgOpacity.value = 100;
+                        if (elements.bgOpacityValue) elements.bgOpacityValue.textContent = '100%';
+                    }
+                }
+
+                // 선택 표시
+                elements.bgColorPresets.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
                 preset.classList.add('selected');
                 updateLivePreview();
             });
@@ -846,14 +899,20 @@
         if (style === 'bold') AppState.setState({ isBold: !AppState.get('isBold') });
         if (style === 'italic') AppState.setState({ isItalic: !AppState.get('isItalic') });
         if (style === 'underline') AppState.setState({ isUnderline: !AppState.get('isUnderline') });
+        updateToolbarUI();
+        updateLivePreview();
     }
 
     function setAlignment(align) {
         AppState.setState({ textAlign: align });
+        updateToolbarUI();
+        updateLivePreview();
     }
 
     function handleOpacityChange(e) {
         AppState.setState({ bgOpacity: parseInt(e.target.value) });
+        updateToolbarUI();
+        updateLivePreview();
     }
 
     // ========================================
@@ -944,6 +1003,14 @@
                 // OCR 결과 텍스트만 표시 (XSS 방지: textContent 사용)
                 elements.ocrResult.textContent = result.text;
                 elements.textInput.value = result.text;
+
+                // [Fix-C] 자동 정렬: 1줄이면 중앙 정렬, 여러 줄이면 좌측 정렬 기반
+                if (result.text.includes('\n')) {
+                    AppState.setState({ textAlign: 'left' });
+                } else {
+                    AppState.setState({ textAlign: 'center' });
+                }
+                updateToolbarUI();
 
                 // [Fix-B] 폰트 크기: 이진 탐색으로 영역에 꼭 맞는 최대 크기 실측 계산
                 const text = result.text;

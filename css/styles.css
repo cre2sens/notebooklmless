@@ -15,12 +15,12 @@
   --text-secondary: #8b949e;
   --text-muted: #484f58;
 
-  /* ── 강조색: Indigo(기본) + Teal(보조) ── */
-  --indigo: #6366f1;
-  --indigo-dim: rgba(99, 102, 241, 0.15);
-  --indigo-glow: rgba(99, 102, 241, 0.35);
-  --purple: #8b5cf6;
-  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  /* ── 강조색: Sky Blue(기본) + 라이트 블루(보조) ── */
+  --indigo: #0ea5e9;
+  --indigo-dim: rgba(14, 165, 233, 0.15);
+  --indigo-glow: rgba(14, 165, 233, 0.35);
+  --purple: #38bdf8;
+  --accent-gradient: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
 
   --teal: #0ea5e9;
   --teal-dim: rgba(14, 165, 233, 0.15);
@@ -64,6 +64,37 @@
   --radius-md: 10px;
   --radius-lg: 16px;
   --radius-xl: 24px;
+}
+
+[data-theme="light"] {
+  /* ── 배경 계층 (Light) ── */
+  --bg-app: #f3f4f6;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f9fafb;
+  --bg-glass: rgba(255, 255, 255, 0.9);
+
+  /* ── 텍스트 (Light) ── */
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+
+  /* ── 강조색 (Light) ── */
+  /* 유지하거나 약간 밝게 조정할 수 있지만 원본과 유사하게 유지 */
+  --indigo: #0284c7;
+  --indigo-dim: rgba(2, 132, 199, 0.15);
+  --indigo-glow: rgba(2, 132, 199, 0.25);
+
+  /* ── 경계 및 테두리 (Light) ── */
+  --border-color: rgba(0, 0, 0, 0.1);
+  --border-hover: rgba(0, 0, 0, 0.2);
+  --border-active: rgba(79, 70, 229, 0.5);
+
+  /* ── 그림자 (Light) ── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-glow: 0 0 15px var(--indigo-glow);
+  --shadow-teal: 0 0 15px var(--teal-glow);
 }
 
 /* ========================================
@@ -1163,6 +1194,29 @@ select {
 .eyedropper-btn svg {
   width: 14px;
   height: 14px;
+}
+
+/* 컬러 프리셋 그룹 */
+.color-presets-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  height: auto;
+}
+
+.color-presets-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.preset-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  width: 28px;
+  flex-shrink: 0;
 }
 
 /* 컬러 프리셋 */
