@@ -178,6 +178,34 @@
         // Canvas Selection
         elements.pdfCanvas.addEventListener('mousedown', handleSelectionStart);
         elements.pdfCanvas.addEventListener('mousemove', handleSelectionMove);
+
+        // 전역 이벤트 (선택 영역 취소 - ESC 키 및 외부 여백 클릭)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (AppState.get('selectionRect') || AppState.get('previewOverlay') || AppState.get('isSelecting')) {
+                    clearSelection();
+                }
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+            if (AppState.get('isSelecting')) return;
+            if (!AppState.get('selectionRect') && !AppState.get('previewOverlay')) return;
+
+            const isInsideEditor = elements.editorForm && elements.editorForm.contains(e.target);
+            const isInsideSelectionBox = elements.selectionBox && elements.selectionBox.contains(e.target);
+            const isInsideOverlayCanvas = elements.overlayCanvas && elements.overlayCanvas.contains(e.target);
+            const isInsidePdfCanvas = elements.pdfCanvas && elements.pdfCanvas.contains(e.target);
+            const isHeader = e.target.closest('.header');
+            const isLeftPanel = e.target.closest('.panel-left');
+            const isToast = e.target.closest('.toast-container');
+            const isDebugPanel = e.target.closest('.debug-panel');
+
+            // 에디터 패널, 캔버스 자체, 헤더, 왼쪽 패널 등 기능적 UI 요소를 벗어난 빈 공간 클릭 시 선택 해제
+            if (!isInsideEditor && !isInsideSelectionBox && !isInsideOverlayCanvas && !isInsidePdfCanvas && !isHeader && !isLeftPanel && !isToast && !isDebugPanel) {
+                clearSelection();
+            }
+        });
         elements.pdfCanvas.addEventListener('mouseup', handleSelectionEnd);
         elements.pdfCanvas.addEventListener('mouseleave', handleSelectionEnd);
 
